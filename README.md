@@ -44,6 +44,21 @@ uv run ruff format .
 uv run pre-commit run --all-files
 ```
 
+## Cursor IDE Setup
+
+This project includes VS Code/Cursor IDE configuration files in the `.vscode/` directory:
+
+- **Testing**: Use the Testing panel to run individual tests or all tests
+- **Tasks**: Use `Cmd+Shift+P` → "Tasks: Run Task" to access common tasks:
+  - Run All Tests
+  - Run Tests with Coverage
+  - Run Ruff Check
+  - Run Ruff Format
+  - Run Pre-commit
+  - Install Dependencies
+- **Debugging**: Use the Debug panel to debug tests with breakpoints
+- **Format on Save**: Code is automatically formatted when you save files
+
 ## Project Structure
 
 ```
