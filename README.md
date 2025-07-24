@@ -39,6 +39,11 @@ uv run ruff check .
 uv run ruff format .
 ```
 
+6. Run pre-commit hooks:
+```bash
+uv run pre-commit run --all-files
+```
+
 ## Project Structure
 
 ```
@@ -59,6 +64,7 @@ uptimer-python-sdk/
 - **Testing**: Uses pytest with coverage reporting
 - **Linting**: Uses ruff with all rules enabled
 - **Formatting**: Uses ruff formatter
+- **Pre-commit hooks**: Automatically runs ruff check and format on commits
 - **Build System**: Uses hatchling for package building
 
 ## License
