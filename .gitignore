@@ -163,3 +163,4 @@ cython_debug/
 
 # uv
 .uv/ 
+sandbox.py 

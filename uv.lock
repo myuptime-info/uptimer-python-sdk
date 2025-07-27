@@ -590,12 +590,6 @@ dependencies = [
     { name = "httpx" },
 ]
 
-[package.optional-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "pytest-cov" },
-]
-
 [package.dev-dependencies]
 dev = [
     { name = "pre-commit" },
@@ -607,12 +601,7 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "httpx", specifier = ">=0.28.1" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0.0" },
-    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0.0" },
-]
-provides-extras = ["dev"]
+requires-dist = [{ name = "httpx", specifier = ">=0.28.1" }]
 
 [package.metadata.requires-dev]
 dev = [
