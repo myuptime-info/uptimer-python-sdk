@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from models.region import Region
 from uptimer.endpoints.endpoint import BaseEndpoint
+from uptimer.models import from_api_region
 
 if TYPE_CHECKING:
     from uptimer.http import UptimerHttpLib
+    from uptimer.models.region import Region
 
 
 class RegionsEndpoint(BaseEndpoint):
@@ -20,4 +21,4 @@ class RegionsEndpoint(BaseEndpoint):
     def all(self) -> list[Region]:
         response = self.http.client.get(self.url)
         result = self.http.parse_response(response=response)
-        return [Region(**region) for region in result]
+        return [from_api_region(region) for region in result]
