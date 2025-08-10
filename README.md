@@ -1,8 +1,16 @@
 # Uptimer Python SDK
 
-# Usage 
+A Python SDK for uptimer - a monitoring and uptime checking service.
 
-```python 
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+For third-party license information, see the [NOTICE](NOTICE) file.
+
+## Usage
+
+```python
 from uptimer.client import UptimerClient
 from uptimer.models.rule import CreateRuleRequest, RuleRequest, RuleResponse, RuleResponseBody
 from uptimer.errors import DefaultUptimerApiError, UptimerInvalidHttpCodeError, UptimerError
@@ -60,31 +68,34 @@ except DefaultUptimerApiError as e:
   # error responses from uptimer server
   print(
     e.message,  # user message
-    e.code,  # error id 
-    e.error_type,  # class of error, 
+    e.code,  # error id
+    e.error_type,  # class of error,
     e.details,  # detailed message for a developer
   )
 except UptimerInvalidHttpCodeError as e:
   # uptimer api always return 200, if not -> http transport error
-  # for an example 404 status is really page (url) not found, it doesn't mean that an object with id not found. 
+  # for an example 404 status is really page (url) not found, it doesn't mean that an object with id not found.
   print(
-    e.url, 
-    e.status_code, 
+    e.url,
+    e.status_code,
   )
-except UptimerError as e: # base error, if you need one 
-  raise 
+except UptimerError as e: # base error, if you need one
+  raise
 ```
+
 Also, check out [examples directory](./examples)
 
 ### Development Setup
 
 1. Clone the repository:
+
 ```bash
 git clone <repository-url>
 cd uptimer-python-sdk
 ```
 
 2. Install dependencies:
+
 ```bash
 uv sync --dev
 # for integration tests
@@ -92,26 +103,52 @@ uv run playwright install chromium
 ```
 
 3. Run tests:
+
 ```bash
 uv run pytest
-# integration 
-docker pull myuptime/uptimer 
+# integration
+docker pull myuptime/uptimer
 docker run -p 2517:2517 myuptime/uptimer
-UPTIMER_URL=http://localhost:2517  uv run --integration 
+UPTIMER_URL=http://localhost:2517  uv run --integration
 ```
 
 4. Run linting:
+
 ```bash
 uv run ruff check .
-uv run mypy src 
+uv run mypy src
 ```
 
 5. Format code:
+
 ```bash
 uv run ruff format .
 ```
 
 6. Run pre-commit hooks:
+
 ```bash
 uv run pre-commit run --all-files
 ```
+
+## Third-Party Licenses
+
+This project uses the following third-party libraries:
+
+### Production Dependencies
+
+- **httpx** (BSD 3-Clause License) - HTTP client for Python
+
+### Development Dependencies
+
+- **mypy** (Apache 2.0 License) - Static type checker
+- **playwright** (Apache 2.0 License) - Browser automation
+- **pre-commit** (MIT License) - Git hooks framework
+- **pytest** (MIT License) - Testing framework
+- **pytest-cov** (MIT License) - Coverage plugin for pytest
+- **pytest-httpx** (MIT License) - HTTPX plugin for pytest
+- **pytest-playwright** (MIT License) - Playwright plugin for pytest
+- **responses** (Apache 2.0 License) - Mock library for requests
+- **ruff** (MIT License) - Fast Python linter and formatter
+
+All third-party licenses are compatible with the MIT License used by this project. Note that the BSD 3-Clause License (used by httpx) includes an additional restriction prohibiting the use of the copyright holder's name for endorsement without permission.

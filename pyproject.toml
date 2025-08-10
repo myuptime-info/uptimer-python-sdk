@@ -8,12 +8,15 @@ version = "0.1.0"
 description = "A Python SDK for uptimer"
 readme = "README.md"
 requires-python = ">=3.9"
+license = { text = "MIT" }
 authors = [{ name = "Roman Zadoev", email = "zadoev@gmail.com" }]
 
+[tool.hatch.build.targets.wheel]
+packages = ["src/uptimer"]
+include = ["LICENSE", "NOTICE", "README.md"]
 
-dependencies = [
-    "httpx>=0.28.1"
-]
+
+dependencies = ["httpx>=0.28.1"]
 
 [dependency-groups]
 dev = [
