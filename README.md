@@ -1,15 +1,80 @@
 # Uptimer Python SDK
 
-A Python SDK for uptimer services.
+# Usage 
 
-## Installation
+```python 
+from uptimer.client import UptimerClient
+from uptimer.models.rule import CreateRuleRequest, RuleRequest, RuleResponse, RuleResponseBody
+from uptimer.errors import DefaultUptimerApiError, UptimerInvalidHttpCodeError, UptimerError
+# Initialize the client
+client = UptimerClient(
+    api_key="your-api-key-here",
+    base_url="https://api.uptimer.com",  # or your custom base URL
+)
+regions = client.v1.regions.all()
+workspaces = client.v1.workspaces.all()
+workspace_id = workspaces[0].id
+rules =client.v1.rules.all(workspace_id)
 
-This project uses [uv](https://github.com/astral-sh/uv) for dependency management.
+new_rule = client.v1.rules.create(
+    CreateRuleRequest(
+        name="My Test Rule",
+        interval=60,  # Check every 60 seconds
+        workspace_id=workspace_id,
+        request=RuleRequest(
+            url="https://example.com",
+            method="GET",  # PATCH, POST, HEAD
+            content_type="application/json",  # expected content type
+            data="",  # data (substring) that should be contained in resonse
+        ),
+        response=RuleResponse(
+            statuses=[200, 201, 202],  # any of this status means site is up
+            body=RuleResponseBody(content="expected response"),
+        ),
+    ),
+)
 
-### Prerequisites
+new_rule_updated = client.v1.rules.update(
+    new_rule.id,
+    CreateRuleRequest(
+        name="Updated Rule Name",
+        interval=120,  # Change to 2 minutes
+        workspace_id=workspace_id,
+        request=RuleRequest(
+            url="https://updated-example.com",
+            method="POST",
+            content_type="application/json",
+            data='{"key": "value"}',
+        ),
+        response=RuleResponse(
+            statuses=[200, 201],
+            body=RuleResponseBody(content="updated expected response"),
+        ),
+    ),
+)
 
-- Python 3.8 or higher
-- uv (install with `pip install uv`)
+# caching errors on delete example
+try:
+  client.v1.rules.delete(new_rule_updated.id)
+except DefaultUptimerApiError as e:
+  # error responses from uptimer server
+  print(
+    e.message,  # user message
+    e.code,  # error id 
+    e.error_type,  # class of error, 
+    e.details,  # detailed message for a developer
+  )
+except UptimerInvalidHttpCodeError as e:
+  # uptimer api always return 200, if not -> http transport error
+  # for an example 404 status is really page (url) not found, it doesn't mean that an object with id not found. 
+  print(
+    e.url, 
+    e.status_code, 
+  )
+except UptimerError as e: # base error, if you need one 
+  raise 
+```
+Also, check out [examples directory](./examples)
 
 ### Development Setup
 
@@ -22,16 +87,23 @@ cd uptimer-python-sdk
 2. Install dependencies:
 ```bash
 uv sync --dev
+# for integration tests
+uv run playwright install chromium
 ```
 
 3. Run tests:
 ```bash
 uv run pytest
+# integration 
+docker pull myuptime/uptimer 
+docker run -p 2517:2517 myuptime/uptimer
+UPTIMER_URL=http://localhost:2517  uv run --integration 
 ```
 
 4. Run linting:
 ```bash
 uv run ruff check .
+uv run mypy src 
 ```
 
 5. Format code:
@@ -43,45 +115,3 @@ uv run ruff format .
 ```bash
 uv run pre-commit run --all-files
 ```
-
-## Cursor IDE Setup
-
-This project includes VS Code/Cursor IDE configuration files in the `.vscode/` directory:
-
-- **Testing**: Use the Testing panel to run individual tests or all tests
-- **Tasks**: Use `Cmd+Shift+P` → "Tasks: Run Task" to access common tasks:
-  - Run All Tests
-  - Run Tests with Coverage
-  - Run Ruff Check
-  - Run Ruff Format
-  - Run Pre-commit
-  - Install Dependencies
-- **Debugging**: Use the Debug panel to debug tests with breakpoints
-- **Format on Save**: Code is automatically formatted when you save files
-
-## Project Structure
-
-```
-uptimer-python-sdk/
-├── src/
-│   └── uptimer_python_sdk/
-│       ├── __init__.py
-│       └── example.py
-├── tests/
-│   ├── __init__.py
-│   └── test_example.py
-├── pyproject.toml
-└── README.md
-```
-
-## Development
-
-- **Testing**: Uses pytest with coverage reporting
-- **Linting**: Uses ruff with all rules enabled
-- **Formatting**: Uses ruff formatter
-- **Pre-commit hooks**: Automatically runs ruff check and format on commits
-- **Build System**: Uses hatchling for package building
-
-## License
-
-[Add your license here] 

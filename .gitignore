@@ -162,5 +162,6 @@ cython_debug/
 #  *.iws
 
 # uv
-.uv/ 
+.uv/
+.idea/
 sandbox.py 

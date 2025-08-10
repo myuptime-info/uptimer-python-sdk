@@ -37,8 +37,8 @@ class UptimerHttpLib:
         path = path.strip("/")
         return self._base_url.rstrip("/") + "/" + path
 
+    @staticmethod
     def parse_response(
-        self,
         response: httpx.Response,
     ) -> Any:  # noqa: ANN401
         if response.status_code != 200:

@@ -1,4 +1,11 @@
 repos:
+  - repo: local
+    hooks:
+      - id: mypy-diff
+        name: mypy on staged files only
+        entry: ./tools/mypy-diff.sh
+        language: system
+        types: [ python ]
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.12.5
     hooks:

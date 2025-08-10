@@ -180,6 +180,7 @@ def test_get_rules_list(
     assert len(rules_objects_list) == len(rules_result)
 
     for rule_object, rule_result in zip(rules_objects_list, rules_result):
+        assert isinstance(rule_result, dict)  # mypy
         # Test top-level properties
         assert rule_object.id == rule_result["id"]
         assert rule_object.name == rule_result["name"]
@@ -189,6 +190,7 @@ def test_get_rules_list(
 
         # Test request properties
         request_data = rule_result["request"]
+        assert isinstance(request_data, dict) # mypy
         assert rule_object.request.url == request_data["url"]
         assert rule_object.request.method == request_data["method"]
         assert rule_object.request.content_type == request_data["content_type"]
@@ -197,6 +199,7 @@ def test_get_rules_list(
 
         # Test response properties
         response_data = rule_result["response"]
+        assert isinstance(response_data, dict)  # mypy
         assert rule_object.response.statuses == response_data["statuses"]
         assert rule_object.response.body.content == response_data["body"]["content"]
         assert rule_object.response.kind == response_data["kind"]
@@ -241,6 +244,7 @@ def test_get_rule(
 
     # Test request properties
     request_data = rule_result["request"]
+    assert isinstance(request_data, dict) # mypy
     assert rule_object.request.url == request_data["url"]
     assert rule_object.request.method == request_data["method"]
     assert rule_object.request.content_type == request_data["content_type"]
@@ -249,6 +253,7 @@ def test_get_rule(
 
     # Test response properties
     response_data = rule_result["response"]
+    assert isinstance(response_data, dict)  # mypy
     assert rule_object.response.statuses == response_data["statuses"]
     assert rule_object.response.body.content == response_data["body"]["content"]
     assert rule_object.response.kind == response_data["kind"]
@@ -323,6 +328,7 @@ def test_create_rule(
 
     # Test request properties
     request_data = rule_result["request"]
+    assert isinstance(request_data, dict)  # mypy
     assert rule_object.request.url == request_data["url"]
     assert rule_object.request.method == request_data["method"]
     assert rule_object.request.content_type == request_data["content_type"]
@@ -331,6 +337,7 @@ def test_create_rule(
 
     # Test response properties
     response_data = rule_result["response"]
+    assert isinstance(response_data, dict)  # mypy
     assert rule_object.response.statuses == response_data["statuses"]
     assert rule_object.response.body.content == response_data["body"]["content"]
     assert rule_object.response.kind == response_data["kind"]
@@ -405,6 +412,7 @@ def test_update_rule_with_rule(
 
     # Test request properties
     request_data = rule_result["request"]
+    assert isinstance(request_data, dict)  # mypy
     assert rule_object.request.url == request_data["url"]
     assert rule_object.request.method == request_data["method"]
     assert rule_object.request.content_type == request_data["content_type"]
@@ -413,6 +421,7 @@ def test_update_rule_with_rule(
 
     # Test response properties
     response_data = rule_result["response"]
+    assert isinstance(response_data, dict)  # mypy
     assert rule_object.response.statuses == response_data["statuses"]
     assert rule_object.response.body.content == response_data["body"]["content"]
     assert rule_object.response.kind == response_data["kind"]
@@ -486,6 +495,7 @@ def test_update_rule_with_create_request(
 
     # Test request properties
     request_data = rule_result["request"]
+    assert isinstance(request_data, dict)  # mypy
     assert rule_object.request.url == request_data["url"]
     assert rule_object.request.method == request_data["method"]
     assert rule_object.request.content_type == request_data["content_type"]
@@ -494,6 +504,7 @@ def test_update_rule_with_create_request(
 
     # Test response properties
     response_data = rule_result["response"]
+    assert isinstance(response_data, dict)  # mypy
     assert rule_object.response.statuses == response_data["statuses"]
     assert rule_object.response.body.content == response_data["body"]["content"]
     assert rule_object.response.kind == response_data["kind"]
