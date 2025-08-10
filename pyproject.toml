@@ -10,13 +10,12 @@ readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
 authors = [{ name = "Roman Zadoev", email = "zadoev@gmail.com" }]
+dependencies = ["httpx>=0.28.1"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/uptimer"]
 include = ["LICENSE", "NOTICE", "README.md"]
 
-
-dependencies = ["httpx>=0.28.1"]
 
 [dependency-groups]
 dev = [
