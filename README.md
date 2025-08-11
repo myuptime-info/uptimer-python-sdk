@@ -17,7 +17,7 @@ from uptimer.errors import DefaultUptimerApiError, UptimerInvalidHttpCodeError, 
 # Initialize the client
 client = UptimerClient(
     api_key="your-api-key-here",
-    base_url="https://api.uptimer.com",  # or your custom base URL
+    base_url="http://127.0.0.1:2517/api",  # or your custom base URL
 )
 regions = client.v1.regions.all()
 workspaces = client.v1.workspaces.all()
@@ -83,7 +83,7 @@ except UptimerError as e: # base error, if you need one
   raise
 ```
 
-Also, check out [examples directory](./examples)
+Also, check out [examples directory](https://github.com/myuptime-info/uptimer-python-sdk/examples)
 
 ### Development Setup
 

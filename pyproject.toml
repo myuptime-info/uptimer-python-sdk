@@ -3,19 +3,19 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "uptimer"
+name = "uptimer-python-sdk"
 version = "0.2.0"
 description = "A Python SDK for uptimer"
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
+urls = { "Repository" = "https://github.com/myuptime-info/uptimer-python-sdk" }
 authors = [{ name = "Roman Zadoev", email = "zadoev@gmail.com" }]
 dependencies = ["httpx>=0.28.1"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/uptimer"]
 include = ["LICENSE", "NOTICE", "README.md"]
-
 
 
 [tool.commitizen]
@@ -35,6 +35,7 @@ dev = [
     "pytest-playwright>=0.7.0",
     "responses>=0.25.7",
     "ruff>=0.12.5",
+    "twine>=6.1.0",
 ]
 
 
