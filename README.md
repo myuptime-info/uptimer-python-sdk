@@ -1,6 +1,6 @@
 # Uptimer Python SDK
 
-A Python SDK for uptimer - a monitoring and uptime checking service.
+A Python SDK for [uptimer](https://uptimer.myuptime.info/) - a monitoring and uptime checking service.
 
 ## License
 
