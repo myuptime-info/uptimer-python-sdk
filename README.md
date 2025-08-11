@@ -8,6 +8,17 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 For third-party license information, see the [NOTICE](NOTICE) file.
 
+## Installation 
+
+```shell
+pip install uptimer-python-sdk
+```
+
+or 
+```shell
+uv adduptimer-python-sdk
+```
+
 ## Usage
 
 ```python
