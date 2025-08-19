@@ -2,7 +2,9 @@
 
 ![Uptimer](https://static.myuptime.info/61uvxp/icon.png)
 
-A Python SDK for [uptimer](https://uptimer.myuptime.info/) - a monitoring and uptime checking service.
+A Python SDK for uptimer - a monitoring and uptime checking service.
+* [uptimer self-hosted](https://uptimer.myuptime.info)
+* [myuptime.info](https://myuptime.info)
 
 ## License
 
