@@ -9,8 +9,8 @@ from uptimer.http import UptimerHttpLib
 class UptimerClient:
     v1: V1Endpoint
 
-    def __init__(self, api_key: str, base_url: str | None = None):
-        self.set_uptimer_http_lib(UptimerHttpLib(api_key, base_url))
+    def __init__(self, api_key: str, base_url: str):
+        self._http_lib = UptimerHttpLib(api_key, base_url)
         self.v1 = V1Endpoint(self._http_lib)
 
     def version(self) -> str:
@@ -19,3 +19,8 @@ class UptimerClient:
 
     def set_uptimer_http_lib(self, http_lib: UptimerHttpLib) -> None:
         self._http_lib = http_lib
+
+
+class UptimerCloudClient(UptimerClient):
+    def __init__(self, api_key: str):
+        super().__init__(api_key, "https://api.myuptime.info")

@@ -1,5 +1,7 @@
 # Uptimer Python SDK
 
+![Uptimer](https://static.myuptime.info/61uvxp/icon.png)
+
 A Python SDK for [uptimer](https://uptimer.myuptime.info/) - a monitoring and uptime checking service.
 
 ## License
@@ -16,11 +18,32 @@ pip install uptimer-python-sdk
 
 or 
 ```shell
-uv adduptimer-python-sdk
+uv add uptimer-python-sdk
 ```
 
 ## Usage
 
+### Create client
+
+#### self-hosted
+
+```python
+from uptimer.client import UptimerClient
+client = UptimerClient(
+    api_key="your-api-key-here",
+    base_url="http://127.0.0.1:2517/api",  # or your custom base URL
+)
+```
+
+#### cloud  
+```python
+from uptimer.client import UptimerCloudClient
+client = UptimerCloudClient(
+    api_key="your-api-key-here",
+)
+```
+
+### Basic example
 ```python
 from uptimer.client import UptimerClient
 from uptimer.models.rule import CreateRuleRequest, RuleRequest, RuleResponse, RuleResponseBody

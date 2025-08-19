@@ -13,10 +13,7 @@ class WorkspacesEndpoint(BaseEndpoint):
 
 
 class UptimerHttpLib:
-    def __init__(self, api_key: str, base_url: str | None = None):
-        if base_url is None:
-            base_url = "https://api.uptimer.com"
-
+    def __init__(self, api_key: str, base_url: str):
         self._base_url = base_url.rstrip("/")
         self._http_client = httpx.Client(
             base_url=base_url,

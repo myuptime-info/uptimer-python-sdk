@@ -1147,7 +1147,7 @@ wheels = [
 ]
 
 [[package]]
-name = "uptimer"
+name = "uptimer-python-sdk"
 version = "0.2.0"
 source = { editable = "." }
 dependencies = [
