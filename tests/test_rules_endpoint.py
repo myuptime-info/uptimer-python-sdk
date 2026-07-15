@@ -314,7 +314,7 @@ def test_create_rule(
     httpx_mock.add_response(
         method="POST",
         json=api_response(rule_result),
-        match_content=b'{"name":"My Test Rule","interval":60,"workspace_id":"03075d25-6cad-4205-ad83-2da1bd8fad9c","request":{"url":"https://example.com","method":"GET","content_type":"application/json","data":"","kind":"rule_request"},"response":{"statuses":[200],"body":{"content":"expected response","kind":"rule_response_body"},"kind":"rule_response"},"kind":"rule"}',
+        match_content=b'{"name":"My Test Rule","interval":60,"workspace_id":"03075d25-6cad-4205-ad83-2da1bd8fad9c","request":{"url":"https://example.com","method":"GET","content_type":"application/json","data":"","kind":"rule_request"},"response":{"statuses":[200],"body":{"content":"expected response","kind":"rule_response_body"},"kind":"rule_response"},"regions":[],"kind":"rule"}',
     )
 
     rule_object = uptimer_client.v1.rules.create(create_request)
@@ -341,6 +341,67 @@ def test_create_rule(
     assert rule_object.response.statuses == response_data["statuses"]
     assert rule_object.response.body.content == response_data["body"]["content"]
     assert rule_object.response.kind == response_data["kind"]
+
+
+def test_create_rule_with_regions(
+    uptimer_client: UptimerClient,
+    httpx_mock: HTTPXMock,
+):
+    """A rule created with regions sends them in the payload and parses them back."""
+    workspace_id = "03075d25-6cad-4205-ad83-2da1bd8fad9c"
+    rule_id = "d901834d-5768-46ae-91f5-7974b0c764b2"
+
+    create_request = CreateRuleRequest(
+        name="Regioned Rule",
+        interval=60,
+        workspace_id=workspace_id,
+        request=RuleRequest(
+            url="https://example.com",
+            method="GET",
+            content_type="application/json",
+            data="",
+            kind="rule_request",
+        ),
+        response=RuleResponse(
+            statuses=[200],
+            body=RuleResponseBody(content=""),
+            kind="rule_response",
+        ),
+        regions=["eu-west", "us-east"],
+        kind="rule",
+    )
+
+    rule_result = {
+        "id": rule_id,
+        "name": "Regioned Rule",
+        "interval": 60,
+        "workspace_id": workspace_id,
+        "request": {
+            "url": "https://example.com",
+            "method": "GET",
+            "content_type": "application/json",
+            "data": "",
+            "kind": "rule_request",
+        },
+        "response": {
+            "statuses": [200],
+            "body": {"content": "", "kind": "rule_response_body"},
+            "kind": "rule_response",
+        },
+        "regions": ["eu-west", "us-east"],
+        "kind": "rule",
+    }
+
+    httpx_mock.add_response(
+        method="POST",
+        json=api_response(rule_result),
+        match_content=b'{"name":"Regioned Rule","interval":60,"workspace_id":"03075d25-6cad-4205-ad83-2da1bd8fad9c","request":{"url":"https://example.com","method":"GET","content_type":"application/json","data":"","kind":"rule_request"},"response":{"statuses":[200],"body":{"content":"","kind":"rule_response_body"},"kind":"rule_response"},"regions":["eu-west","us-east"],"kind":"rule"}',
+    )
+
+    rule_object = uptimer_client.v1.rules.create(create_request)
+
+    assert rule_object.id == rule_id
+    assert rule_object.regions == ["eu-west", "us-east"]
 
 
 def test_update_rule_with_rule(
@@ -398,7 +459,7 @@ def test_update_rule_with_rule(
     httpx_mock.add_response(
         method="POST",
         json=api_response(rule_result),
-        match_content=b'{"name":"Updated Rule Name","interval":120,"workspace_id":"03075d25-6cad-4205-ad83-2da1bd8fad9c","request":{"url":"https://updated-example.com","method":"POST","content_type":"application/json","data":"{\\"key2\\": \\"value\\"}","kind":"rule_request"},"response":{"statuses":[200,201],"body":{"content":"updated expected response","kind":"rule_response_body"},"kind":"rule_response"},"kind":"rule"}',
+        match_content=b'{"name":"Updated Rule Name","interval":120,"workspace_id":"03075d25-6cad-4205-ad83-2da1bd8fad9c","request":{"url":"https://updated-example.com","method":"POST","content_type":"application/json","data":"{\\"key2\\": \\"value\\"}","kind":"rule_request"},"response":{"statuses":[200,201],"body":{"content":"updated expected response","kind":"rule_response_body"},"kind":"rule_response"},"regions":[],"kind":"rule"}',
     )
 
     rule_object = uptimer_client.v1.rules.update(rule_id, update_request)
@@ -481,7 +542,7 @@ def test_update_rule_with_create_request(
     httpx_mock.add_response(
         method="POST",
         json=api_response(rule_result),
-        match_content=b'{"name":"Updated Rule Name","interval":120,"workspace_id":"03075d25-6cad-4205-ad83-2da1bd8fad9c","request":{"url":"https://updated-example.com","method":"POST","content_type":"application/json","data":"{\\"key2\\": \\"value\\"}","kind":"rule_request"},"response":{"statuses":[200,201],"body":{"content":"updated expected response","kind":"rule_response_body"},"kind":"rule_response"},"kind":"rule"}',
+        match_content=b'{"name":"Updated Rule Name","interval":120,"workspace_id":"03075d25-6cad-4205-ad83-2da1bd8fad9c","request":{"url":"https://updated-example.com","method":"POST","content_type":"application/json","data":"{\\"key2\\": \\"value\\"}","kind":"rule_request"},"response":{"statuses":[200,201],"body":{"content":"updated expected response","kind":"rule_response_body"},"kind":"rule_response"},"regions":[],"kind":"rule"}',
     )
 
     rule_object = uptimer_client.v1.rules.update(rule_id, update_request)

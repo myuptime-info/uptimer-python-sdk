@@ -11,6 +11,10 @@ from uptimer.models.rule import (
 client = UptimerClient(api_key="your-api-key-here")
 workspace_id = "your-workspace-id-here"
 
+# Regions are matched by name. List them to see what's available on your instance;
+# a rule with no regions is never checked and stays at "No Data", so assign at least one.
+region_names = [region.name for region in client.v1.regions.all()]
+
 # Create a new rule
 rule = client.v1.rules.create(
     CreateRuleRequest(
@@ -29,7 +33,9 @@ rule = client.v1.rules.create(
             body=RuleResponseBody(content="expected response"),
             kind="rule_response",
         ),
+        regions=region_names[:1],  # assign the first available region
     ),
 )
 
 print(f"Created rule: {rule.name} (ID: {rule.id})")
+print(f"Assigned regions: {rule.regions}")

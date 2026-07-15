@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -34,6 +34,9 @@ class BaseRule:
     workspace_id: str  # workspace id
     request: RuleRequest  # request configuration
     response: RuleResponse  # response validation
+    # region names the rule runs in (matched by name). A rule with no regions is
+    # never checked and stays at "No Data" — assign at least one to monitor it.
+    regions: list[str] = field(default_factory=list)
     kind: str = "rule"
 
 
