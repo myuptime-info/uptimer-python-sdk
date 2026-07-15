@@ -1,3 +1,9 @@
+## 0.4.0 (2026-07-15)
+
+### Feat
+
+- assign regions (by name) when creating or updating a rule via `rules.create`/`rules.update`; rules now expose a `regions` field
+
 ## 0.3.0 (2025-08-19)
 
 ### Feat
