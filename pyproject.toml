@@ -5,13 +5,18 @@ build-backend = "hatchling.build"
 [project]
 name = "uptimer-python-sdk"
 version = "0.4.0"
-description = "A Python SDK for uptimer"
+description = "A Python SDK for hosted and self-hosted Uptimer"
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
-urls = { "Repository" = "https://github.com/myuptime-info/uptimer-python-sdk" }
 authors = [{ name = "Roman Zadoev", email = "zadoev@gmail.com" }]
 dependencies = ["httpx>=0.28.1"]
+
+[project.urls]
+Homepage = "https://myuptime.info"
+Documentation = "https://uptimer.myuptime.info/latest/reference/python-sdk/"
+Repository = "https://github.com/myuptime-info/uptimer-python-sdk"
+Changelog = "https://myuptime.info/product-updates"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/uptimer"]

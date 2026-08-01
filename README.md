@@ -1,10 +1,12 @@
 # Uptimer Python SDK
 
-![Uptimer](https://static.myuptime.info/61uvxp/icon.png)
+A Python SDK for hosted and self-hosted Uptimer.
 
-A Python SDK for uptimer - a monitoring and uptime checking service.
-* [uptimer self-hosted](https://uptimer.myuptime.info)
-* [myuptime.info](https://myuptime.info)
+* [Hosted Uptimer](https://myuptime.info)
+* [Self-hosted documentation](https://uptimer.myuptime.info)
+* [PyPI package](https://pypi.org/project/uptimer-python-sdk/)
+* [Uptimer resources](https://myuptime.info/resources)
+* [Product updates](https://myuptime.info/product-updates)
 
 ## License
 
@@ -119,7 +121,7 @@ except UptimerError as e: # base error, if you need one
   raise
 ```
 
-Also, check out [examples directory](https://github.com/myuptime-info/uptimer-python-sdk/examples)
+Also, check out the [examples directory](https://github.com/myuptime-info/uptimer-python-sdk/tree/main/examples).
 
 ### Development Setup
 
@@ -143,9 +145,9 @@ uv run playwright install chromium
 ```bash
 uv run pytest
 # integration
-docker pull myuptime/uptimer
-docker run -p 2517:2517 myuptime/uptimer
-UPTIMER_URL=http://localhost:2517  uv run --integration
+docker pull ghcr.io/myuptime-info/uptimer:1.3.0
+docker run -p 2517:2517 ghcr.io/myuptime-info/uptimer:1.3.0
+UPTIMER_URL=http://localhost:2517 uv run --integration
 ```
 
 4. Run linting:
