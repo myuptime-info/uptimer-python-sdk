@@ -37,7 +37,7 @@ class IncompatibleServerError(UptimerError):
         self.server_version = server_version
         super().__init__(
             f"This server reports version {server_version}, which does not "
-            "provide API v2. uptimer-python-sdk 1.x requires API v2 "
+            "provide API v2. uptimer-python-sdk 1.5.x requires API v2 "
             "(uptimer 1.5.0+ or myuptime.info 15.1.0+). For API v1, use "
             "uptimer-python-sdk 0.4.x.",
         )

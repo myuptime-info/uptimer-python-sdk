@@ -177,7 +177,8 @@ def test_unknown_location_is_refused_in_v2_words(
 
 
 def test_invalid_agreement_is_refused(
-    client: UptimerClient, location_name: str,
+    client: UptimerClient,
+    location_name: str,
 ) -> None:
     with pytest.raises(DefaultUptimerApiError) as excinfo:
         client.monitoring.websites.create(

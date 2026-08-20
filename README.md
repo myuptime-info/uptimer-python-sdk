@@ -156,13 +156,13 @@ state, not a missing one.
 
 ### Migrating from 0.4.x
 
-**1.0.0 targets API v2 only.** Your existing 0.4.x code keeps working against
+**1.5.0 targets API v2 only.** Your existing 0.4.x code keeps working against
 the server — API v1 is unchanged and supported — but it must stay on the 0.4.x
 SDK. Pin `uptimer-python-sdk<1` if you are not ready to move.
 
 What changed:
 
-| 0.4.x (API v1) | 1.0.0 (API v2) |
+| 0.4.x (API v1) | 1.5.0 (API v2) |
 |---|---|
 | `client.v1.workspaces` | `client.workspaces` |
 | `client.v1.regions` | `client.locations` |
@@ -180,6 +180,11 @@ monitor types arrive later without renaming this one.
 `client.version()` is unchanged — `/version` is a shared global endpoint, not a
 versioned one, so it works against any server, including one too old for the
 rest of this SDK.
+
+**Why 1.5.0 and not 1.0.0:** the SDK's major.minor tracks the uptimer release it
+targets, so the version is the compatibility statement — 1.5.x speaks to uptimer
+1.5.0 and later. Patch numbers are independent, so an SDK fix can ship without a
+server release.
 
 Also, check out the [examples directory](https://github.com/myuptime-info/uptimer-python-sdk/tree/main/examples).
 

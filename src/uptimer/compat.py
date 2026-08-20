@@ -15,10 +15,23 @@ from __future__ import annotations
 
 import re
 
+from uptimer import __version__
 from uptimer.errors import IncompatibleServerError
 
-# The first uptimer release that serves API v2.
-MINIMUM_UPTIMER_VERSION = (1, 5, 0)
+
+def _minimum_from_own_version() -> tuple[int, int, int]:
+    """
+    Return the oldest server version this SDK speaks to.
+
+    The SDK's major.minor tracks the uptimer release it targets (Decision
+    0013), so 1.5.x requires a 1.5.0 server. Deriving it here rather than
+    writing the number down twice means the two cannot drift apart.
+    """
+    parts = __version__.split(".")
+    return (int(parts[0]), int(parts[1]), 0)
+
+
+MINIMUM_UPTIMER_VERSION = _minimum_from_own_version()
 
 _VERSION_RE = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)")
 
