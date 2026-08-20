@@ -8,61 +8,47 @@ from .errors import (
     TypeMismatchError,
     UnknownKindError,
 )
-from .region import Region
-from .rule import (
-    Rule,
-    RuleRequest,
-    RuleResponse,
-    RuleResponseBody,
+from .incident import Incident, IncidentLocations
+from .location import Location
+from .monitor import (
+    WebsiteMonitor,
+    WebsiteMonitorRequest,
+    WebsiteMonitorResponse,
+    WebsiteMonitorResponseBody,
 )
 from .workspace import Workspace
 
-# Type variable for the return type
 T = TypeVar("T")
 
-# Union type for all possible return types
 DeserializableType = Union[
-    Rule,
-    RuleRequest,
-    RuleResponse,
-    RuleResponseBody,
-    Region,
+    WebsiteMonitor,
+    WebsiteMonitorRequest,
+    WebsiteMonitorResponse,
+    WebsiteMonitorResponseBody,
+    Incident,
+    Location,
     Workspace,
 ]
 
-# Type for items that might be deserializable
 DeserializableItem = Union[dict[str, Any], list[Any], Any]
 
-# Registry of classes by their kind
+# Kinds this SDK understands. v1's kinds (rule, region, ...) are deliberately
+# absent: 1.0.0 targets API v2 only.
 _KIND_REGISTRY = {
-    "rule": Rule,
-    "rule_request": RuleRequest,
-    "rule_response": RuleResponse,
-    "rule_response_body": RuleResponseBody,
-    "region": Region,
+    "website_monitor": WebsiteMonitor,
+    "website_monitor_request": WebsiteMonitorRequest,
+    "website_monitor_response": WebsiteMonitorResponse,
+    "website_monitor_response_body": WebsiteMonitorResponseBody,
+    "incident": Incident,
+    "location": Location,
     "workspace": Workspace,
 }
 
 
 def from_api(data: dict[str, Any]) -> DeserializableType:
-    """
-    Universal deserializer that creates objects based on their 'kind' property.
-
-    Recursively deserializes nested objects.
-
-    Args:
-        data: Dictionary containing the object data with a 'kind' property
-
-    Returns:
-        The appropriate object instance based on the 'kind' property
-
-    Raises:
-        InvalidDataTypeError: If data is not a dictionary
-        MissingKindError: If the 'kind' property is missing
-        UnknownKindError: If the 'kind' property is not recognized
-    """
+    """Build an object from an API payload, chosen by its 'kind'."""
     if not isinstance(data, dict):
-        raise InvalidDataTypeError(type(data))
+        raise InvalidDataTypeError(type(data).__name__)
 
     kind = data.get("kind")
     if not kind:
@@ -72,50 +58,61 @@ def from_api(data: dict[str, Any]) -> DeserializableType:
         raise UnknownKindError(kind)
 
     cls = _KIND_REGISTRY[kind]
-
-    # Create a copy to avoid modifying the original
-    obj_data = data.copy()
-
-    # Recursively deserialize nested objects that have 'kind' properties
-    for key, value in obj_data.items():
-        if isinstance(value, dict) and value.get("kind"):
-            obj_data[key] = from_api(value)
-        elif isinstance(value, list):
-            # Handle lists of objects
-            obj_data[key] = [_deserialize_if_possible(item) for item in value]
-
-    return cls(**obj_data)
+    return _build(cls, data)
 
 
-def _deserialize_if_possible(item: DeserializableItem) -> DeserializableItem:
-    """Deserialize an item if it has a kind property."""
-    if isinstance(item, dict) and item.get("kind"):
-        return from_api(item)
-    return item
+def _build(cls: type, data: dict[str, Any]) -> Any:  # noqa: ANN401
+    """Construct one object, recursing into nested payloads that carry a kind."""
+    kwargs: dict[str, Any] = {}
+    for key, value in data.items():
+        if isinstance(value, dict) and "kind" in value:
+            kwargs[key] = from_api(value)
+        elif key == "locations" and isinstance(value, dict):
+            # Incident evidence: a plain object, no kind of its own.
+            kwargs[key] = IncidentLocations(
+                failing=value.get("failing", []),
+                unknown=value.get("unknown", []),
+                ok=value.get("ok", []),
+            )
+        else:
+            kwargs[key] = value
+    try:
+        return cls(**kwargs)
+    except TypeError as exc:
+        raise TypeMismatchError(cls.__name__, str(exc)) from exc
 
 
-def from_api_rule(data: dict[str, Any]) -> Rule:
-    """Type-safe deserializer for Rule objects."""
-    result = from_api(data)
-    if not isinstance(result, Rule):
-        msg = "Rule"
-        raise TypeMismatchError(msg, type(result).__name__)
-    return result
+def from_api_website_monitor(data: dict[str, Any]) -> WebsiteMonitor:
+    """Deserialize a website monitor, checking the kind is the expected one."""
+    obj = from_api(data)
+    if not isinstance(obj, WebsiteMonitor):
+        expected = "WebsiteMonitor"
+        raise TypeMismatchError(expected, type(obj).__name__)
+    return obj
 
 
-def from_api_region(data: dict[str, Any]) -> Region:
-    """Type-safe deserializer for Region objects."""
-    result = from_api(data)
-    if not isinstance(result, Region):
-        msg = "Region"
-        raise TypeMismatchError(msg, type(result).__name__)
-    return result
+def from_api_location(data: dict[str, Any]) -> Location:
+    """Deserialize a location."""
+    obj = from_api(data)
+    if not isinstance(obj, Location):
+        expected = "Location"
+        raise TypeMismatchError(expected, type(obj).__name__)
+    return obj
 
 
 def from_api_workspace(data: dict[str, Any]) -> Workspace:
-    """Type-safe deserializer for Workspace objects."""
-    result = from_api(data)
-    if not isinstance(result, Workspace):
-        msg = "Workspace"
-        raise TypeMismatchError(msg, type(result).__name__)
-    return result
+    """Deserialize a workspace."""
+    obj = from_api(data)
+    if not isinstance(obj, Workspace):
+        expected = "Workspace"
+        raise TypeMismatchError(expected, type(obj).__name__)
+    return obj
+
+
+def from_api_incident(data: dict[str, Any]) -> Incident:
+    """Deserialize an incident."""
+    obj = from_api(data)
+    if not isinstance(obj, Incident):
+        expected = "Incident"
+        raise TypeMismatchError(expected, type(obj).__name__)
+    return obj

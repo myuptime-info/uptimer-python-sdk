@@ -1,12 +1,10 @@
-"""List all workspaces example."""
+"""List the workspaces an API key can reach."""
 
 from uptimer.client import UptimerClient
 
-client = UptimerClient(api_key="your-api-key-here")
+client = UptimerClient(
+    api_key="your-api-key-here", base_url="https://myuptime.info/api"
+)
 
-# Get all workspaces
-workspaces = client.v1.workspaces.all()
-
-print("Workspaces:")
-for workspace in workspaces:
-    print(workspace)
+for workspace in client.workspaces.all():
+    print(f"{workspace.id}  {workspace.name}  ({workspace.role})")

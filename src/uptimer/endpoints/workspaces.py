@@ -7,7 +7,7 @@ from uptimer.models import from_api_workspace
 
 if TYPE_CHECKING:
     from uptimer.http import UptimerHttpLib
-    from uptimer.models.workspace import Workspace
+    from uptimer.models import Workspace
 
 
 class WorkspacesEndpoint(BaseEndpoint):
@@ -19,6 +19,7 @@ class WorkspacesEndpoint(BaseEndpoint):
         super().__init__(http, "workspaces", parent_segments)
 
     def all(self) -> list[Workspace]:
+        """Every workspace this API key can reach."""
         response = self.http.client.get(self.url)
         result = self.http.parse_response(response=response)
-        return [from_api_workspace(workspace) for workspace in result]
+        return [from_api_workspace(item) for item in result]

@@ -113,7 +113,9 @@ def create_workspace_via_ui(page: Page, workspace_name: str) -> None:
 
 
 def wait_for_workspace_in_sidebar(
-    page: Page, workspace_name: str, timeout: int = 10000,
+    page: Page,
+    workspace_name: str,
+    timeout: int = 10000,
 ) -> None:
     """Wait for a workspace to appear in the sidebar menu."""
     workspace_locator = page.locator(
@@ -148,5 +150,3 @@ def test_workspaces_list(page: Page, uptimer_url: str):
     workspaces = client.v1.workspaces.all()
     api_workspace_names = [ws.name for ws in workspaces]
     assert set(updated_workspaces) == set(api_workspace_names)
-
-

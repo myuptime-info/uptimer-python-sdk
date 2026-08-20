@@ -48,78 +48,138 @@ client = UptimerCloudClient(
 ```
 
 ### Basic example
+
 ```python
 from uptimer.client import UptimerClient
-from uptimer.models.rule import CreateRuleRequest, RuleRequest, RuleResponse, RuleResponseBody
-from uptimer.errors import DefaultUptimerApiError, UptimerInvalidHttpCodeError, UptimerError
-# Initialize the client
+from uptimer.errors import (
+    DefaultUptimerApiError,
+    IncompatibleServerError,
+    UptimerError,
+    UptimerInvalidHttpCodeError,
+)
+from uptimer.models import (
+    AGREEMENT_MAJORITY,
+    CreateWebsiteMonitorRequest,
+    UpdateWebsiteMonitorRequest,
+    WebsiteMonitorRequest,
+    WebsiteMonitorResponse,
+    WebsiteMonitorResponseBody,
+)
+
 client = UptimerClient(
     api_key="your-api-key-here",
     base_url="http://127.0.0.1:2517/api",  # or your custom base URL
 )
-regions = client.v1.regions.all()
-workspaces = client.v1.workspaces.all()
-workspace_id = workspaces[0].id
-rules =client.v1.rules.all(workspace_id)
 
-new_rule = client.v1.rules.create(
-    CreateRuleRequest(
-        name="My Test Rule",
-        interval=60,  # Check every 60 seconds
-        workspace_id=workspace_id,
-        request=RuleRequest(
-            url="https://example.com",
+# Optional: fail fast with a message that names the fix, rather than a 404 on
+# the first real call.
+print("server:", client.check_compatibility())
+
+workspace = client.workspaces.all()[0]
+locations = [location.name for location in client.locations.all()]
+
+monitor = client.monitoring.websites.create(
+    CreateWebsiteMonitorRequest(
+        name="Checkout API",
+        interval=60,  # seconds between probes
+        workspace_id=workspace.id,
+        request=WebsiteMonitorRequest(
+            url="https://checkout.example/health",
             method="GET",  # PATCH, POST, HEAD
-            content_type="application/json",  # expected content type
-            data="",  # data (substring) that should be contained in resonse
-        ),
-        response=RuleResponse(
-            statuses=[200, 201, 202],  # any of this status means site is up
-            body=RuleResponseBody(content="expected response"),
-        ),
-    ),
-)
-
-new_rule_updated = client.v1.rules.update(
-    new_rule.id,
-    CreateRuleRequest(
-        name="Updated Rule Name",
-        interval=120,  # Change to 2 minutes
-        workspace_id=workspace_id,
-        request=RuleRequest(
-            url="https://updated-example.com",
-            method="POST",
             content_type="application/json",
-            data='{"key": "value"}',
+            data="",
         ),
-        response=RuleResponse(
-            statuses=[200, 201],
-            body=RuleResponseBody(content="updated expected response"),
+        response=WebsiteMonitorResponse(
+            statuses=[200, 201],  # any of these means the site is up
+            body=WebsiteMonitorResponseBody(content="ok"),  # expected substring
         ),
+        locations=locations,
+        # How many locations must report a problem before this monitor does:
+        # "any", "majority" or "all". Omit to keep the server default.
+        agreement=AGREEMENT_MAJORITY,
     ),
 )
 
-# caching errors on delete example
+monitor = client.monitoring.websites.update(
+    monitor.id,
+    UpdateWebsiteMonitorRequest(
+        name="Checkout API",
+        interval=120,
+        request=WebsiteMonitorRequest(url="https://checkout.example/health", method="GET"),
+        response=WebsiteMonitorResponse(statuses=[200]),
+        locations=locations,
+        # Omitting agreement here keeps the stored one.
+    ),
+)
+
+# What is wrong right now. Only open incidents come back.
+for incident in client.incidents.all(workspace.id):
+    print(incident.monitor_name, incident.status, incident.locations.failing)
+
 try:
-  client.v1.rules.delete(new_rule_updated.id)
+    client.monitoring.websites.delete(monitor.id)
 except DefaultUptimerApiError as e:
-  # error responses from uptimer server
-  print(
-    e.message,  # user message
-    e.code,  # error id
-    e.error_type,  # class of error,
-    e.details,  # detailed message for a developer
-  )
+    # error responses from the uptimer server
+    print(
+        e.message,  # user message
+        e.code,  # error id
+        e.error_type,  # class of error
+        e.details,  # detailed message for a developer
+    )
+except IncompatibleServerError as e:
+    # the server does not provide API v2 — see Migrating from 0.4.x below
+    print(e)
 except UptimerInvalidHttpCodeError as e:
-  # uptimer api always return 200, if not -> http transport error
-  # for an example 404 status is really page (url) not found, it doesn't mean that an object with id not found.
-  print(
-    e.url,
-    e.status_code,
-  )
-except UptimerError as e: # base error, if you need one
-  raise
+    # the uptimer api always returns 200; anything else is a transport error.
+    # a 404 really is "no such URL", not "no object with that id".
+    print(e.url, e.status_code)
+except UptimerError:  # base error, if you need one
+    raise
 ```
+
+### Incident status
+
+`client.incidents.all()` returns only **open** incidents. `status` carries the
+same words the Uptimer screens show, so a client and the UI cannot disagree:
+
+| status | meaning |
+|---|---|
+| `problem` | confirmed, and notifications have gone out |
+| `pending` | failing, but inside the confirm hold — **nobody has been notified yet** |
+| `recovering` | reporting ok again while the incident is still open |
+| `no_data` | nothing usable arrived; a silent location counts toward the agreement |
+| `ok` | healthy |
+
+`locations.failing` / `.unknown` / `.ok` is the evidence the verdict was taken
+from. A location that has never reported stays in `unknown` — that is a real
+state, not a missing one.
+
+### Migrating from 0.4.x
+
+**1.0.0 targets API v2 only.** Your existing 0.4.x code keeps working against
+the server — API v1 is unchanged and supported — but it must stay on the 0.4.x
+SDK. Pin `uptimer-python-sdk<1` if you are not ready to move.
+
+What changed:
+
+| 0.4.x (API v1) | 1.0.0 (API v2) |
+|---|---|
+| `client.v1.workspaces` | `client.workspaces` |
+| `client.v1.regions` | `client.locations` |
+| `client.v1.rules` | `client.monitoring.websites` |
+| `Region` | `Location` |
+| `Rule`, `CreateRuleRequest` | `WebsiteMonitor`, `CreateWebsiteMonitorRequest` |
+| `regions=[...]` | `locations=[...]` |
+| — | `agreement="any"｜"majority"｜"all"` |
+| — | `client.incidents` |
+
+Why `monitoring.websites` rather than `monitors`: website monitoring is a
+built-in template, not the general model. Keeping the bare name free lets other
+monitor types arrive later without renaming this one.
+
+`client.version()` is unchanged — `/version` is a shared global endpoint, not a
+versioned one, so it works against any server, including one too old for the
+rest of this SDK.
 
 Also, check out the [examples directory](https://github.com/myuptime-info/uptimer-python-sdk/tree/main/examples).
 

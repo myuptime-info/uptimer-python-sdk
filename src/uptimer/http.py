@@ -5,7 +5,11 @@ from typing import Any
 import httpx
 
 from uptimer.endpoints.endpoint import BaseEndpoint
-from uptimer.errors import DefaultUptimerApiError, UptimerInvalidHttpCodeError
+from uptimer.errors import (
+    DefaultUptimerApiError,
+    IncompatibleServerError,
+    UptimerInvalidHttpCodeError,
+)
 
 
 class WorkspacesEndpoint(BaseEndpoint):
@@ -38,6 +42,13 @@ class UptimerHttpLib:
     def parse_response(
         response: httpx.Response,
     ) -> Any:  # noqa: ANN401
+        if response.status_code == 404 and "/v2/" in str(response.request.url):
+            # A server without API v2 has no /v2 routes at all. Saying "404"
+            # here would leave the user guessing; the version gate in
+            # client.check_compatibility() catches this earlier when the
+            # version number can express it, and this catches the rest.
+            unknown = "unknown (no /v2 routes)"
+            raise IncompatibleServerError(unknown)
         if response.status_code != 200:
             raise UptimerInvalidHttpCodeError(
                 response.request.url,
