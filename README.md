@@ -85,7 +85,7 @@ monitor = client.monitoring.websites.create(
         workspace_id=workspace.id,
         request=WebsiteMonitorRequest(
             url="https://checkout.example/health",
-            method="GET",  # PATCH, POST, HEAD
+            method="GET",  # one of GET, POST, PATCH, OPTIONS
             content_type="application/json",
             data="",
         ),
