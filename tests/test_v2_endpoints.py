@@ -10,7 +10,7 @@ from pytest_httpx import HTTPXMock
 
 from tests.conftest import api_response
 from uptimer.client import UptimerClient
-from uptimer.models import (
+from uptimer.models.v2 import (
     AGREEMENT_ALL,
     CreateWebsiteMonitorRequest,
     WebsiteMonitorRequest,
@@ -20,10 +20,10 @@ from uptimer.models import (
 
 
 def test_paths(uptimer_client: UptimerClient):
-    assert uptimer_client.locations.path == "v2/locations"
-    assert uptimer_client.incidents.path == "v2/incidents"
-    assert uptimer_client.monitoring.path == "v2/monitoring"
-    assert uptimer_client.monitoring.websites.path == "v2/monitoring/websites"
+    assert uptimer_client.v2.locations.path == "v2/locations"
+    assert uptimer_client.v2.incidents.path == "v2/incidents"
+    assert uptimer_client.v2.monitoring.path == "v2/monitoring"
+    assert uptimer_client.v2.monitoring.websites.path == "v2/monitoring/websites"
 
 
 def test_locations_deserialize(
@@ -35,7 +35,7 @@ def test_locations_deserialize(
             [{"id": "l1", "name": "de", "active_workers_count": 2, "kind": "location"}],
         ),
     )
-    locations = uptimer_client.locations.all()
+    locations = uptimer_client.v2.locations.all()
     assert len(locations) == 1
     assert locations[0].name == "de"
     assert locations[0].active_workers_count == 2
@@ -70,7 +70,7 @@ def test_monitor_deserializes_nested_kinds(
     httpx_mock: HTTPXMock,
 ):
     httpx_mock.add_response(json=api_response(_monitor_payload()))
-    monitor = uptimer_client.monitoring.websites.get("m1")
+    monitor = uptimer_client.v2.monitoring.websites.get("m1")
     assert monitor.id == "m1"
     assert monitor.agreement == AGREEMENT_ALL
     assert monitor.locations == ["de"]
@@ -86,7 +86,7 @@ def test_create_omits_an_empty_agreement(
     # An empty agreement means "leave it at the server default", which the
     # server expresses by omission — sending "" would be a different request.
     httpx_mock.add_response(json=api_response(_monitor_payload()))
-    uptimer_client.monitoring.websites.create(
+    uptimer_client.v2.monitoring.websites.create(
         CreateWebsiteMonitorRequest(
             name="Checkout",
             interval=60,
@@ -125,7 +125,7 @@ def test_incident_deserializes_evidence(
             ],
         ),
     )
-    incidents = uptimer_client.incidents.all("w1")
+    incidents = uptimer_client.v2.incidents.all("w1")
     assert len(incidents) == 1
     incident = incidents[0]
     assert incident.status == "problem"

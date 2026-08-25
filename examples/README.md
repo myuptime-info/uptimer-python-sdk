@@ -1,40 +1,33 @@
 # Uptimer Python SDK Examples
 
-This directory contains minimal examples demonstrating how to use the Uptimer Python SDK.
+Minimal examples for the Uptimer Python SDK. Each one is a single operation, as
+short as it can be.
 
-## Quick Start
+API v2 resources are reached through `client.v2`, and its types are imported from
+`uptimer.models.v2` — the SDK keeps the API version visible because the API is
+versioned by path. `client.version()` and the compatibility helpers stay on the
+client itself, since `/version` is shared and unversioned.
 
-1. **Setup**: `01_client_setup.py` - Basic client initialization
-2. **List Resources**:
-   - `02_list_workspaces.py` - List all workspaces
-   - `03_list_regions.py` - List all regions
-   - `04_list_rules.py` - List rules for a workspace
-3. **Rule Operations**:
-   - `05_get_rule.py` - Get a specific rule by ID
-   - `06_create_rule.py` - Create a new rule
-   - `07_update_rule.py` - Update an existing rule
-   - `08_delete_rule.py` - Delete a rule
+## The examples
+
+1. `01_client_setup.py` — create a client and confirm the server speaks API v2
+2. `02_list_workspaces.py` — `client.v2.workspaces.all()`
+3. `03_list_locations.py` — `client.v2.locations.all()`
+4. `04_create_website_monitor.py` — `client.v2.monitoring.websites.create(...)`
+5. `05_open_incidents.py` — `client.v2.incidents.all(workspace_id)`
 
 ## Usage
 
-Replace the placeholder values in each example:
+Replace the placeholders before running:
 
-- `your-api-key-here` - Your Uptimer API key
-- `your-workspace-id-here` - Your workspace ID
-- `your-rule-id-here` - Your rule ID
+- `your-api-key-here` — an API key from the dashboard (**User → API Keys**)
+- the `base_url` — `https://myuptime.info/api` for the hosted product, or your
+  own instance's URL plus `/api`
 
-## Running Examples
+## Running
 
 ```bash
-# Run a specific example
-uv run python examples/01_client_setup.py
-
-# Or run all examples in sequence
 uv run python examples/01_client_setup.py
 uv run python examples/02_list_workspaces.py
-# ... etc
+# ... and so on
 ```
-
-## Example Structure
-
-Each example is focused on a single operation and is as minimal as possible for quick reference and documentation purposes.

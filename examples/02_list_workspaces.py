@@ -6,5 +6,5 @@ client = UptimerClient(
     api_key="your-api-key-here", base_url="https://myuptime.info/api"
 )
 
-for workspace in client.workspaces.all():
+for workspace in client.v2.workspaces.all():
     print(f"{workspace.id}  {workspace.name}  ({workspace.role})")

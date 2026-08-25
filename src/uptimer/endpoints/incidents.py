@@ -3,11 +3,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from uptimer.endpoints.endpoint import BaseEndpoint
-from uptimer.models import from_api_incident
+from uptimer.models.v2 import from_api_incident
 
 if TYPE_CHECKING:
     from uptimer.http import UptimerHttpLib
-    from uptimer.models import Incident
+    from uptimer.models.v2 import Incident
 
 
 class IncidentsEndpoint(BaseEndpoint):

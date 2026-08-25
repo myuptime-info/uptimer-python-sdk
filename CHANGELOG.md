@@ -12,9 +12,16 @@
 
 ### Feat
 
-- `client.workspaces`, `client.locations`, `client.incidents` and
-  `client.monitoring.websites` replace the v1 namespace.
-- `client.incidents` reads **open** incidents, with the same five status words
+- `client.v2.workspaces`, `client.v2.locations`, `client.v2.incidents` and
+  `client.v2.monitoring.websites` replace the v1 namespace. The API version stays
+  visible in the SDK, as it was in 0.4.x — there are no root-level aliases.
+- **Types are versioned too:** import them from `uptimer.models.v2`
+  (`Location`, `Incident`, `Workspace`, the website-monitor classes, the
+  `AGREEMENT_*` / `STATUS_*` constants and the `from_api*` helpers). They are no
+  longer exported from `uptimer.models`, and there are no flat aliases. The
+  deserialization exceptions stay on `uptimer.models`, being
+  version-independent.
+- `client.v2.incidents` reads **open** incidents, with the same five status words
   the Uptimer screens use — `problem`, `pending`, `recovering`, `no_data`, `ok`.
   `pending` means failing but inside the confirm hold: nobody has been notified
   yet.
@@ -28,16 +35,17 @@
 
 | 0.4.x | 1.5.0 |
 |---|---|
-| `client.v1.workspaces` | `client.workspaces` |
-| `client.v1.regions` | `client.locations` |
-| `client.v1.rules` | `client.monitoring.websites` |
+| `client.v1.workspaces` | `client.v2.workspaces` |
+| `client.v1.regions` | `client.v2.locations` |
+| `client.v1.rules` | `client.v2.monitoring.websites` |
 | `Region` | `Location` |
 | `Rule` / `CreateRuleRequest` | `WebsiteMonitor` / `CreateWebsiteMonitorRequest` |
 | `regions=[...]` | `locations=[...]` |
-| — | `agreement=...`, `client.incidents` |
+| — | `agreement=...`, `client.v2.incidents` |
+| `from uptimer.models import …` | `from uptimer.models.v2 import …` |
 
-`client.version()` is unchanged: `/version` is a shared global endpoint, not a
-versioned one.
+`client.version()` and the compatibility helpers are unchanged and stay on the
+client itself: `/version` is a shared global endpoint, not a versioned one.
 
 ## 0.4.0 (2026-07-15)
 

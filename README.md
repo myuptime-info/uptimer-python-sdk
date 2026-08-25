@@ -57,7 +57,7 @@ from uptimer.errors import (
     UptimerError,
     UptimerInvalidHttpCodeError,
 )
-from uptimer.models import (
+from uptimer.models.v2 import (
     AGREEMENT_MAJORITY,
     CreateWebsiteMonitorRequest,
     UpdateWebsiteMonitorRequest,
@@ -75,10 +75,10 @@ client = UptimerClient(
 # the first real call.
 print("server:", client.check_compatibility())
 
-workspace = client.workspaces.all()[0]
-locations = [location.name for location in client.locations.all()]
+workspace = client.v2.workspaces.all()[0]
+locations = [location.name for location in client.v2.locations.all()]
 
-monitor = client.monitoring.websites.create(
+monitor = client.v2.monitoring.websites.create(
     CreateWebsiteMonitorRequest(
         name="Checkout API",
         interval=60,  # seconds between probes
@@ -100,7 +100,7 @@ monitor = client.monitoring.websites.create(
     ),
 )
 
-monitor = client.monitoring.websites.update(
+monitor = client.v2.monitoring.websites.update(
     monitor.id,
     UpdateWebsiteMonitorRequest(
         name="Checkout API",
@@ -113,11 +113,11 @@ monitor = client.monitoring.websites.update(
 )
 
 # What is wrong right now. Only open incidents come back.
-for incident in client.incidents.all(workspace.id):
+for incident in client.v2.incidents.all(workspace.id):
     print(incident.monitor_name, incident.status, incident.locations.failing)
 
 try:
-    client.monitoring.websites.delete(monitor.id)
+    client.v2.monitoring.websites.delete(monitor.id)
 except DefaultUptimerApiError as e:
     # error responses from the uptimer server
     print(
@@ -139,7 +139,7 @@ except UptimerError:  # base error, if you need one
 
 ### Incident status
 
-`client.incidents.all()` returns only **open** incidents. `status` carries the
+`client.v2.incidents.all()` returns only **open** incidents. `status` carries the
 same words the Uptimer screens show, so a client and the UI cannot disagree:
 
 | status | meaning |
@@ -164,22 +164,36 @@ What changed:
 
 | 0.4.x (API v1) | 1.5.0 (API v2) |
 |---|---|
-| `client.v1.workspaces` | `client.workspaces` |
-| `client.v1.regions` | `client.locations` |
-| `client.v1.rules` | `client.monitoring.websites` |
+| `client.v1.workspaces` | `client.v2.workspaces` |
+| `client.v1.regions` | `client.v2.locations` |
+| `client.v1.rules` | `client.v2.monitoring.websites` |
 | `Region` | `Location` |
 | `Rule`, `CreateRuleRequest` | `WebsiteMonitor`, `CreateWebsiteMonitorRequest` |
 | `regions=[...]` | `locations=[...]` |
 | — | `agreement="any"｜"majority"｜"all"` |
-| — | `client.incidents` |
+| — | `client.v2.incidents` |
+| `from uptimer.models import …` | `from uptimer.models.v2 import …` |
+
+**The version namespace stays, and now covers the types too.** As in 0.4.x,
+resources sit under the API version that serves them — `client.v1.*` becomes
+`client.v2.*`, not a bare `client.*` — and the models follow: import them from
+`uptimer.models.v2`, not from `uptimer.models`. The HTTP API is versioned by
+path, so the SDK shows the same thing rather than hiding it. There are no
+root-level aliases for either surface, so a stale flat import fails loudly
+instead of silently binding to the wrong thing.
+
+The deserialization exceptions (`ModelError`, `TypeMismatchError`, …) stay on
+`uptimer.models`: the same error is raised whichever API version produced the
+payload, so versioning them would say something untrue.
 
 Why `monitoring.websites` rather than `monitors`: website monitoring is a
 built-in template, not the general model. Keeping the bare name free lets other
 monitor types arrive later without renaming this one.
 
-`client.version()` is unchanged — `/version` is a shared global endpoint, not a
-versioned one, so it works against any server, including one too old for the
-rest of this SDK.
+`client.version()`, `client.check_compatibility()` and
+`client.ensure_compatible()` are unchanged and stay on the client itself —
+`/version` is a shared global endpoint, not a versioned one, so it works against
+any server, including one too old for the rest of this SDK.
 
 **Why 1.5.0 and not 1.0.0:** the SDK's major.minor tracks the uptimer release it
 targets, so the version is the compatibility statement — 1.5.x speaks to uptimer

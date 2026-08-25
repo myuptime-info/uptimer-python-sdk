@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from typing import Any, TypeVar, Union
 
-from .errors import (
+from uptimer.models.errors import (
     InvalidDataTypeError,
     MissingKindError,
     TypeMismatchError,
     UnknownKindError,
 )
+
 from .incident import Incident, IncidentLocations
 from .location import Location
 from .monitor import (
@@ -32,8 +33,8 @@ DeserializableType = Union[
 
 DeserializableItem = Union[dict[str, Any], list[Any], Any]
 
-# Kinds this SDK understands. v1's kinds (rule, region, ...) are deliberately
-# absent: 1.0.0 targets API v2 only.
+# The v2 kinds. v1's kinds (rule, region, ...) are deliberately absent: 1.5.x
+# targets API v2 only, and a v1 client stays on the released 0.4.x package.
 _KIND_REGISTRY = {
     "website_monitor": WebsiteMonitor,
     "website_monitor_request": WebsiteMonitorRequest,

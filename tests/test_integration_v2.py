@@ -19,7 +19,7 @@ import pytest
 from uptimer.client import UptimerClient
 from uptimer.compat import ensure_v2_supported
 from uptimer.errors import DefaultUptimerApiError, IncompatibleServerError
-from uptimer.models import (
+from uptimer.models.v2 import (
     AGREEMENT_ALL,
     AGREEMENT_ANY,
     CreateWebsiteMonitorRequest,
@@ -55,7 +55,7 @@ def client() -> UptimerClient:
 
 @pytest.fixture(scope="module")
 def location_name(client: UptimerClient) -> str:
-    locations = client.locations.all()
+    locations = client.v2.locations.all()
     assert locations, "the server has no locations; a worker must be registered"
     return locations[0].name
 
@@ -79,14 +79,14 @@ def test_version_and_compatibility(client: UptimerClient) -> None:
 
 
 def test_workspaces(client: UptimerClient) -> None:
-    workspaces = client.workspaces.all()
+    workspaces = client.v2.workspaces.all()
     assert all(isinstance(w, Workspace) for w in workspaces)
     assert any(w.id == WORKSPACE for w in workspaces)
     assert all(w.kind == "workspace" for w in workspaces)
 
 
 def test_locations(client: UptimerClient) -> None:
-    locations = client.locations.all()
+    locations = client.v2.locations.all()
     assert locations
     assert all(isinstance(loc, Location) for loc in locations)
     assert all(loc.kind == "location" for loc in locations)
@@ -95,7 +95,7 @@ def test_locations(client: UptimerClient) -> None:
 
 
 def test_monitor_lifecycle(client: UptimerClient, location_name: str) -> None:
-    created = client.monitoring.websites.create(
+    created = client.v2.monitoring.websites.create(
         CreateWebsiteMonitorRequest(
             name="SDK lifecycle",
             interval=60,
@@ -113,18 +113,18 @@ def test_monitor_lifecycle(client: UptimerClient, location_name: str) -> None:
         assert created.locations == [location_name]
         assert created.agreement == AGREEMENT_ALL
 
-        fetched = client.monitoring.websites.get(created.id)
+        fetched = client.v2.monitoring.websites.get(created.id)
         assert fetched.id == created.id
         assert fetched.agreement == AGREEMENT_ALL
         assert fetched.request.kind == "website_monitor_request"
         assert fetched.response.kind == "website_monitor_response"
         assert fetched.response.body.kind == "website_monitor_response_body"
 
-        listed = client.monitoring.websites.all(WORKSPACE)
+        listed = client.v2.monitoring.websites.all(WORKSPACE)
         assert created.id in [m.id for m in listed]
 
         # An update that omits the agreement must not reset it.
-        kept = client.monitoring.websites.update(
+        kept = client.v2.monitoring.websites.update(
             created.id,
             UpdateWebsiteMonitorRequest(
                 name="SDK lifecycle renamed",
@@ -137,7 +137,7 @@ def test_monitor_lifecycle(client: UptimerClient, location_name: str) -> None:
         assert kept.name == "SDK lifecycle renamed"
         assert kept.agreement == AGREEMENT_ALL, "an omitted agreement must be kept"
 
-        changed = client.monitoring.websites.update(
+        changed = client.v2.monitoring.websites.update(
             created.id,
             UpdateWebsiteMonitorRequest(
                 name="SDK lifecycle renamed",
@@ -150,18 +150,18 @@ def test_monitor_lifecycle(client: UptimerClient, location_name: str) -> None:
         )
         assert changed.agreement == AGREEMENT_ANY
     finally:
-        deleted = client.monitoring.websites.delete(created.id)
+        deleted = client.v2.monitoring.websites.delete(created.id)
         assert deleted.monitor_id == created.id
 
     with pytest.raises(DefaultUptimerApiError):
-        client.monitoring.websites.get(created.id)
+        client.v2.monitoring.websites.get(created.id)
 
 
 def test_unknown_location_is_refused_in_v2_words(
     client: UptimerClient,
 ) -> None:
     with pytest.raises(DefaultUptimerApiError) as excinfo:
-        client.monitoring.websites.create(
+        client.v2.monitoring.websites.create(
             CreateWebsiteMonitorRequest(
                 name="SDK bad location",
                 interval=60,
@@ -181,7 +181,7 @@ def test_invalid_agreement_is_refused(
     location_name: str,
 ) -> None:
     with pytest.raises(DefaultUptimerApiError) as excinfo:
-        client.monitoring.websites.create(
+        client.v2.monitoring.websites.create(
             CreateWebsiteMonitorRequest(
                 name="SDK bad agreement",
                 interval=60,
@@ -206,7 +206,7 @@ def test_incident_appears_for_a_dead_port(
     fails and the engine must open an incident. Agreement is "any" so a single
     location is enough.
     """
-    monitor = client.monitoring.websites.create(
+    monitor = client.v2.monitoring.websites.create(
         CreateWebsiteMonitorRequest(
             name="SDK dead port",
             interval=60,
@@ -225,7 +225,7 @@ def test_incident_appears_for_a_dead_port(
         deadline = time.time() + INCIDENT_TIMEOUT_S
         found: Incident | None = None
         while time.time() < deadline:
-            for incident in client.incidents.all(
+            for incident in client.v2.incidents.all(
                 WORKSPACE,
                 monitor_id=monitor.id,
             ):
@@ -253,14 +253,14 @@ def test_incident_appears_for_a_dead_port(
         assert found.locations.ok == [], "a dead port must not report ok"
 
         # Narrowing to another monitor id must not return this one.
-        others = client.incidents.all(WORKSPACE, monitor_id="does-not-exist")
+        others = client.v2.incidents.all(WORKSPACE, monitor_id="does-not-exist")
         assert all(i.monitor_id != monitor.id for i in others)
 
         # And it shows up in the unfiltered workspace list too.
-        workspace_wide = client.incidents.all(WORKSPACE)
+        workspace_wide = client.v2.incidents.all(WORKSPACE)
         assert monitor.id in [i.monitor_id for i in workspace_wide]
     finally:
-        client.monitoring.websites.delete(monitor.id)
+        client.v2.monitoring.websites.delete(monitor.id)
 
 
 def test_incompatible_server_message_names_the_fix() -> None:

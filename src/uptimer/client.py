@@ -3,22 +3,24 @@ from __future__ import annotations
 from typing import cast
 
 from uptimer.compat import ensure_v2_supported
-from uptimer.endpoints.incidents import IncidentsEndpoint
-from uptimer.endpoints.locations import LocationsEndpoint
-from uptimer.endpoints.websites import MonitoringEndpoint
-from uptimer.endpoints.workspaces import WorkspacesEndpoint
+from uptimer.endpoints.v2 import V2Endpoint
 from uptimer.http import UptimerHttpLib
-
-# Every endpoint lives under /v2. This SDK does not speak API v1 — see the
-# migration note in the README if you are coming from 0.4.x.
-_API_VERSION = "v2"
 
 
 class UptimerClient:
-    workspaces: WorkspacesEndpoint
-    locations: LocationsEndpoint
-    incidents: IncidentsEndpoint
-    monitoring: MonitoringEndpoint
+    """
+    The Uptimer API client.
+
+    Resources are reached through the API version that serves them:
+    `client.v2.workspaces`, `client.v2.locations`, `client.v2.incidents` and
+    `client.v2.monitoring.websites`. This SDK does not speak API v1 — see the
+    migration note in the README if you are coming from 0.4.x.
+
+    `version()` and the compatibility helpers stay here rather than under a
+    version namespace, because `/version` is shared and unversioned.
+    """
+
+    v2: V2Endpoint
 
     def __init__(self, api_key: str, base_url: str):
         self._http_lib = UptimerHttpLib(api_key, base_url)
@@ -26,10 +28,7 @@ class UptimerClient:
         self._wire()
 
     def _wire(self) -> None:
-        self.workspaces = WorkspacesEndpoint(self._http_lib, [_API_VERSION])
-        self.locations = LocationsEndpoint(self._http_lib, [_API_VERSION])
-        self.incidents = IncidentsEndpoint(self._http_lib, [_API_VERSION])
-        self.monitoring = MonitoringEndpoint(self._http_lib, [_API_VERSION])
+        self.v2 = V2Endpoint(self._http_lib)
 
     def version(self) -> str:
         """

@@ -5,7 +5,7 @@ Reachability rule — you do not create those separately.
 """
 
 from uptimer.client import UptimerClient
-from uptimer.models import (
+from uptimer.models.v2 import (
     AGREEMENT_MAJORITY,
     CreateWebsiteMonitorRequest,
     WebsiteMonitorRequest,
@@ -17,10 +17,10 @@ client = UptimerClient(
     api_key="your-api-key-here", base_url="https://myuptime.info/api"
 )
 
-workspace = client.workspaces.all()[0]
-locations = [location.name for location in client.locations.all()]
+workspace = client.v2.workspaces.all()[0]
+locations = [location.name for location in client.v2.locations.all()]
 
-monitor = client.monitoring.websites.create(
+monitor = client.v2.monitoring.websites.create(
     CreateWebsiteMonitorRequest(
         name="Checkout API",
         interval=60,

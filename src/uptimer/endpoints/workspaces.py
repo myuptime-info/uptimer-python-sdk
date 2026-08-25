@@ -3,11 +3,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from uptimer.endpoints.endpoint import BaseEndpoint
-from uptimer.models import from_api_workspace
+from uptimer.models.v2 import from_api_workspace
 
 if TYPE_CHECKING:
     from uptimer.http import UptimerHttpLib
-    from uptimer.models import Workspace
+    from uptimer.models.v2 import Workspace
 
 
 class WorkspacesEndpoint(BaseEndpoint):

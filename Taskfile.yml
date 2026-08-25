@@ -1,9 +1,5 @@
-# go-task runner for the uptimer Python SDK. `task --list` shows everything.
-# All tooling goes through `uv` (deps pinned by uv.lock), so local == CI.
-# Release/publish flow (matches the fleet rollout — release, then publish):
-#   task release      # cz bump (version + CHANGELOG + tag) + push
-#   task pypi-test    # validate on TestPyPI
-#   task pypi         # publish to PyPI (only after the release)
+# Dev + git release tasks for the uptimer Python SDK. All tooling via `uv` (uv.lock).
+# PyPI publish lives in the private product repo: /work → task sdk:publish*
 version: '3'
 
 tasks:
@@ -31,24 +27,9 @@ tasks:
       - task: test
 
   release:
-    desc: 'Cut a release: cq (lint + test), then `cz bump` (version + CHANGELOG + tag) + push. Commit your changes first.'
+    desc: 'Cut a release: cq, then `cz bump` (version + CHANGELOG + tag) + push. Commit first. Prefer manual tag when version is already set.'
     cmds:
       - task: cq
       - cz bump --yes
-      # bump commit + the tag cz just made; --follow-tags pushes only reachable tags.
       - git push --follow-tags
-      - 'echo ">> released v$(cz version --project) — now publish with: task pypi"'
-
-  pypi-test:
-    desc: 'Build + upload to TestPyPI (needs a token: TWINE_USERNAME=__token__ TWINE_PASSWORD=pypi-…).'
-    deps: [build]
-    cmds:
-      - uv run twine check dist/*
-      - uv run twine upload --repository-url https://test.pypi.org/legacy/ dist/*
-
-  pypi:
-    desc: 'Build + upload to PyPI (needs a token). Do this only AFTER `task release`.'
-    deps: [build]
-    cmds:
-      - uv run twine check dist/*
-      - uv run twine upload dist/*
+      - 'echo ">> released v$(cz version --project) — publish from /work: task sdk:publish:test, then task sdk:publish"'

@@ -1,10 +1,15 @@
-from .deserialize import (
-    from_api,
-    from_api_incident,
-    from_api_location,
-    from_api_website_monitor,
-    from_api_workspace,
-)
+"""
+Model exceptions, and the versioned model namespaces beneath this one.
+
+**No API type is exported here.** v2's types live in `uptimer.models.v2`:
+
+    from uptimer.models.v2 import CreateWebsiteMonitorRequest, Location
+
+Only the deserialization exceptions sit at this level, because they are
+version-independent — the same `TypeMismatchError` is raised whichever API
+version produced the payload.
+"""
+
 from .errors import (
     DeserializationError,
     InvalidDataTypeError,
@@ -13,61 +18,12 @@ from .errors import (
     TypeMismatchError,
     UnknownKindError,
 )
-from .incident import (
-    STATUS_NO_DATA,
-    STATUS_OK,
-    STATUS_PENDING,
-    STATUS_PROBLEM,
-    STATUS_RECOVERING,
-    Incident,
-    IncidentLocations,
-)
-from .location import Location
-from .monitor import (
-    AGREEMENT_ALL,
-    AGREEMENT_ANY,
-    AGREEMENT_MAJORITY,
-    BaseWebsiteMonitor,
-    CreateWebsiteMonitorRequest,
-    DeleteWebsiteMonitorResponse,
-    UpdateWebsiteMonitorRequest,
-    WebsiteMonitor,
-    WebsiteMonitorRequest,
-    WebsiteMonitorResponse,
-    WebsiteMonitorResponseBody,
-)
-from .workspace import Workspace
 
 __all__ = [
-    "AGREEMENT_ALL",
-    "AGREEMENT_ANY",
-    "AGREEMENT_MAJORITY",
-    "STATUS_NO_DATA",
-    "STATUS_OK",
-    "STATUS_PENDING",
-    "STATUS_PROBLEM",
-    "STATUS_RECOVERING",
-    "BaseWebsiteMonitor",
-    "CreateWebsiteMonitorRequest",
-    "DeleteWebsiteMonitorResponse",
     "DeserializationError",
-    "Incident",
-    "IncidentLocations",
     "InvalidDataTypeError",
-    "Location",
     "MissingKindError",
     "ModelError",
     "TypeMismatchError",
     "UnknownKindError",
-    "UpdateWebsiteMonitorRequest",
-    "WebsiteMonitor",
-    "WebsiteMonitorRequest",
-    "WebsiteMonitorResponse",
-    "WebsiteMonitorResponseBody",
-    "Workspace",
-    "from_api",
-    "from_api_incident",
-    "from_api_location",
-    "from_api_website_monitor",
-    "from_api_workspace",
 ]

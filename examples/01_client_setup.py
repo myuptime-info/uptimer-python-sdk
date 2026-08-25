@@ -15,5 +15,7 @@ try:
 except IncompatibleServerError as exc:
     raise SystemExit(str(exc)) from exc
 
-print("Available: client.workspaces, client.locations,")
-print("           client.incidents, client.monitoring.websites")
+# API v2 lives under client.v2 — the SDK keeps the API version visible, because
+# the API itself is versioned by path.
+print("Available: client.v2.workspaces, client.v2.locations,")
+print("           client.v2.incidents, client.v2.monitoring.websites")

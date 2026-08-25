@@ -147,6 +147,6 @@ def test_workspaces_list(page: Page, uptimer_url: str):
 
     # Verify via API
     client = get_client(api_key, uptimer_url)
-    workspaces = client.v1.workspaces.all()
+    workspaces = client.v2.workspaces.all()
     api_workspace_names = [ws.name for ws in workspaces]
     assert set(updated_workspaces) == set(api_workspace_names)

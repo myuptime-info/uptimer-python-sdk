@@ -3,7 +3,7 @@ from uptimer.endpoints.workspaces import WorkspacesEndpoint
 
 
 def test_client_workspace_endpoint_class(uptimer_client: UptimerClient):
-    workspaces = uptimer_client.workspaces
+    workspaces = uptimer_client.v2.workspaces
     assert isinstance(workspaces, WorkspacesEndpoint)
     assert callable(workspaces.all)
     assert workspaces.path == "v2/workspaces"

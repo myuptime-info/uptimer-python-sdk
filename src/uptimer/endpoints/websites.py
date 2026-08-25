@@ -4,11 +4,11 @@ from dataclasses import asdict
 from typing import TYPE_CHECKING
 
 from uptimer.endpoints.endpoint import BaseEndpoint
-from uptimer.models import DeleteWebsiteMonitorResponse, from_api_website_monitor
+from uptimer.models.v2 import DeleteWebsiteMonitorResponse, from_api_website_monitor
 
 if TYPE_CHECKING:
     from uptimer.http import UptimerHttpLib
-    from uptimer.models import (
+    from uptimer.models.v2 import (
         CreateWebsiteMonitorRequest,
         UpdateWebsiteMonitorRequest,
         WebsiteMonitor,

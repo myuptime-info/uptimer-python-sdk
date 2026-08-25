@@ -9,5 +9,5 @@ client = UptimerClient(
     api_key="your-api-key-here", base_url="https://myuptime.info/api"
 )
 
-for location in client.locations.all():
+for location in client.v2.locations.all():
     print(f"{location.name}: {location.active_workers_count} active worker(s)")
