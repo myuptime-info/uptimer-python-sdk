@@ -17,6 +17,7 @@ from .monitor import (
     WebsiteMonitorResponse,
     WebsiteMonitorResponseBody,
 )
+from .observation import Observation
 from .workspace import Workspace
 
 T = TypeVar("T")
@@ -28,6 +29,7 @@ DeserializableType = Union[
     WebsiteMonitorResponseBody,
     Incident,
     Location,
+    Observation,
     Workspace,
 ]
 
@@ -42,6 +44,7 @@ _KIND_REGISTRY = {
     "website_monitor_response_body": WebsiteMonitorResponseBody,
     "incident": Incident,
     "location": Location,
+    "observation": Observation,
     "workspace": Workspace,
 }
 
@@ -115,5 +118,14 @@ def from_api_incident(data: dict[str, Any]) -> Incident:
     obj = from_api(data)
     if not isinstance(obj, Incident):
         expected = "Incident"
+        raise TypeMismatchError(expected, type(obj).__name__)
+    return obj
+
+
+def from_api_observation(data: dict[str, Any]) -> Observation:
+    """Deserialize a stored observation."""
+    obj = from_api(data)
+    if not isinstance(obj, Observation):
+        expected = "Observation"
         raise TypeMismatchError(expected, type(obj).__name__)
     return obj

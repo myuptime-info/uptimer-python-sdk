@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 from uptimer.endpoints.endpoint import BaseEndpoint
 from uptimer.endpoints.incidents import IncidentsEndpoint
 from uptimer.endpoints.locations import LocationsEndpoint
+from uptimer.endpoints.subjects import SubjectsEndpoint
 from uptimer.endpoints.websites import MonitoringEndpoint
 from uptimer.endpoints.workspaces import WorkspacesEndpoint
 
@@ -28,6 +29,7 @@ class V2Endpoint(BaseEndpoint):
     locations: LocationsEndpoint
     incidents: IncidentsEndpoint
     monitoring: MonitoringEndpoint
+    subjects: SubjectsEndpoint
 
     def __init__(self, http: UptimerHttpLib):
         super().__init__(http, "v2")
@@ -36,3 +38,4 @@ class V2Endpoint(BaseEndpoint):
         self.locations = LocationsEndpoint(http, parent)
         self.incidents = IncidentsEndpoint(http, parent)
         self.monitoring = MonitoringEndpoint(http, parent)
+        self.subjects = SubjectsEndpoint(http, parent)

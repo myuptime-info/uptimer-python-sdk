@@ -137,6 +137,63 @@ except UptimerError:  # base error, if you need one
     raise
 ```
 
+### Reporting your own observations
+
+Uptimer probes websites itself. For anything else — a cron job, a queue worker,
+a nightly export — you add a **custom signal** to a subject in the Uptimer UI
+and report to it yourself.
+
+Requires Uptimer 1.6.0 or later, and a **custom heartbeat or event** signal. The
+platform HTTP signal of a website monitor is written by Uptimer's own probe and
+refuses posted observations.
+
+```python
+from uptimer.client import UptimerClient
+from uptimer.models.v2 import (
+    OBSERVATION_STATUS_OK,
+    OBSERVATION_STATUS_PROBLEM,
+    CreateObservationRequest,
+)
+
+client = UptimerClient(
+    api_key="your-api-key-here",
+    base_url="http://127.0.0.1:2517/api",
+)
+
+# The two slugs are the address: the subject, and the signal within it. Both
+# are shown on the signal's page in the Uptimer UI.
+observations = client.v2.subjects("checkout-api").signals("worker-pulse").observations
+
+# A heartbeat: "I ran, and I am fine."
+stored = observations.create(CreateObservationRequest(status=OBSERVATION_STATUS_OK))
+
+# Everything except status is optional.
+stored = observations.create(
+    CreateObservationRequest(
+        status=OBSERVATION_STATUS_PROBLEM,
+        observed_at="2026-08-30T12:00:00Z",  # RFC 3339; omit to mean "now"
+        value=0.0,                            # optional numeric reading
+        error="queue backlog over threshold",
+        labels={"instance": "worker-3", "env": "prod"},
+    ),
+)
+
+print(stored.accepted, stored.reject_reason)
+```
+
+`accepted` reports **acceptance, not health**: it says Uptimer stored the
+observation and may evaluate it, not that anything is wrong or fine. Whether an
+observation raises an incident is decided by a *rule* that selects the signal.
+
+An observation Uptimer keeps but will not evaluate — one stamped too far in the
+future, say — comes back with `accepted=False` and a `reject_reason` such as
+`clock_skew`. It is **returned, not raised**: it was received. An exception
+means nothing was stored.
+
+Retries are safe. An observation is identified by its signal, its `observed_at`
+and its labels, so re-sending the same one replaces it rather than counting
+twice.
+
 ### Incident status
 
 `client.v2.incidents.all()` returns only **open** incidents. `status` carries the

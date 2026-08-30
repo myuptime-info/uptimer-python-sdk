@@ -12,9 +12,11 @@ class UptimerClient:
     The Uptimer API client.
 
     Resources are reached through the API version that serves them:
-    `client.v2.workspaces`, `client.v2.locations`, `client.v2.incidents` and
-    `client.v2.monitoring.websites`. This SDK does not speak API v1 — see the
-    migration note in the README if you are coming from 0.4.x.
+    `client.v2.workspaces`, `client.v2.locations`, `client.v2.incidents`,
+    `client.v2.monitoring.websites` and
+    `client.v2.subjects(subject).signals(signal).observations`. This SDK does
+    not speak API v1 — see the migration note in the README if you are coming
+    from 0.4.x.
 
     `version()` and the compatibility helpers stay here rather than under a
     version namespace, because `/version` is shared and unversioned.
