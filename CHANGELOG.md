@@ -1,3 +1,9 @@
+## 1.6.0-rc.0 (2026-08-30)
+
+### Feat
+
+- **api**: post custom observations via client.v2 subjects/signals
+
 ## 1.5.0 (2026-08-20)
 
 ### BREAKING CHANGE
