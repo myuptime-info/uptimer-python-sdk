@@ -5,11 +5,16 @@ from typing import TYPE_CHECKING
 from urllib.parse import quote
 
 from uptimer.endpoints.endpoint import BaseEndpoint
-from uptimer.models.v2 import from_api_observation
+from uptimer.models.v2 import from_api_observation, from_api_subject
 
 if TYPE_CHECKING:
     from uptimer.http import UptimerHttpLib
-    from uptimer.models.v2 import CreateObservationRequest, Observation
+    from uptimer.models.v2 import (
+        CreateObservationRequest,
+        CreateSubjectRequest,
+        Observation,
+        Subject,
+    )
 
 
 def _slug(value: str, what: str) -> str:
@@ -134,13 +139,17 @@ class SubjectEndpoint(BaseEndpoint):
 
 class SubjectsEndpoint(BaseEndpoint):
     """
-    The monitored subjects.
+    The monitored subjects: what a workspace watches.
 
-    Call it with a slug to reach one: `client.v2.subjects("checkout")`.
+    Two ways in, because there are two things to do with a subject:
 
-    Deliberately narrow: there is no subject CRUD here. The one thing this
-    namespace exists for is reporting observations to a custom signal, and the
-    path to that is the subject that owns it.
+    - call it with a slug to reach what is under one —
+      `client.v2.subjects("checkout").signals("worker-pulse").observations`;
+    - call the methods here to list, fetch, or create one.
+
+    There is no update or delete. A website subject is changed through its check
+    form, and deleting either kind takes its whole history with it — neither is
+    something to do by accident from a script.
     """
 
     def __init__(
@@ -152,3 +161,48 @@ class SubjectsEndpoint(BaseEndpoint):
 
     def __call__(self, subject_slug: str) -> SubjectEndpoint:
         return SubjectEndpoint(self.http, subject_slug, [*self._parent_segments, self.segment])
+
+    def all(self, workspace_id: str) -> list[Subject]:
+        """
+        Every subject in a workspace, of both kinds.
+
+        Read `subject_kind` to tell them apart: a "website" subject is watched
+        by Uptimer's own probe, a "custom" one reports to you.
+        """
+        response = self.http.client.get(self.url, params={"workspace_id": workspace_id})
+        result = self.http.parse_response(response=response)
+        return [from_api_subject(item) for item in result]
+
+    def get(self, subject_slug: str, workspace_id: str | None = None) -> Subject:
+        """
+        One subject by its slug.
+
+        `workspace_id` is optional and settles an ambiguity rather than being
+        required: a slug is unique within a workspace, not across them, so pass
+        it when the same slug exists in two workspaces you belong to. Without
+        it the server searches your memberships and says so if the answer is
+        more than one.
+        """
+        params = {"workspace_id": workspace_id} if workspace_id else None
+        response = self.http.client.get(
+            f"{self.url}/{_slug(subject_slug, 'subject')}",
+            params=params,
+        )
+        result = self.http.parse_response(response=response)
+        return from_api_subject(result)
+
+    def create(self, subject: CreateSubjectRequest) -> Subject:
+        """
+        Create one empty Custom subject.
+
+        It arrives with nothing under it: no signal, no rule, no HTTP probe.
+        Add a signal to it in the Uptimer UI, then report to that signal through
+        `client.v2.subjects(...).signals(...).observations`.
+
+        Website monitoring is created by `client.v2.monitoring.websites.create`
+        instead — it needs a URL, an interval and locations, and asking for one
+        here is refused with a DefaultUptimerApiError saying so.
+        """
+        response = self.http.client.post(self.url, json=asdict(subject))
+        result = self.http.parse_response(response=response)
+        return from_api_subject(result)

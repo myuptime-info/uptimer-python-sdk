@@ -14,6 +14,7 @@ from .deserialize import (
     from_api_incident,
     from_api_location,
     from_api_observation,
+    from_api_subject,
     from_api_website_monitor,
     from_api_workspace,
 )
@@ -55,6 +56,12 @@ from .observation import (
 from .observation import (
     STATUS_PROBLEM as OBSERVATION_STATUS_PROBLEM,
 )
+from .subject import (
+    SUBJECT_KIND_CUSTOM,
+    SUBJECT_KIND_WEBSITE,
+    CreateSubjectRequest,
+    Subject,
+)
 from .workspace import Workspace
 
 __all__ = [
@@ -73,14 +80,18 @@ __all__ = [
     "STATUS_PENDING",
     "STATUS_PROBLEM",
     "STATUS_RECOVERING",
+    "SUBJECT_KIND_CUSTOM",
+    "SUBJECT_KIND_WEBSITE",
     "BaseWebsiteMonitor",
     "CreateObservationRequest",
+    "CreateSubjectRequest",
     "CreateWebsiteMonitorRequest",
     "DeleteWebsiteMonitorResponse",
     "Incident",
     "IncidentLocations",
     "Location",
     "Observation",
+    "Subject",
     "UpdateWebsiteMonitorRequest",
     "WebsiteMonitor",
     "WebsiteMonitorRequest",
@@ -91,6 +102,7 @@ __all__ = [
     "from_api_incident",
     "from_api_location",
     "from_api_observation",
+    "from_api_subject",
     "from_api_website_monitor",
     "from_api_workspace",
 ]

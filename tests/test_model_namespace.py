@@ -52,14 +52,20 @@ def test_v2_exports_the_whole_public_surface():
         "STATUS_PENDING",
         "STATUS_PROBLEM",
         "STATUS_RECOVERING",
+        # A subject's KIND is how it is configured — website or custom — which
+        # is a different question from the object `kind` every payload carries.
+        "SUBJECT_KIND_CUSTOM",
+        "SUBJECT_KIND_WEBSITE",
         "BaseWebsiteMonitor",
         "CreateObservationRequest",
+        "CreateSubjectRequest",
         "CreateWebsiteMonitorRequest",
         "DeleteWebsiteMonitorResponse",
         "Incident",
         "IncidentLocations",
         "Location",
         "Observation",
+        "Subject",
         "UpdateWebsiteMonitorRequest",
         "WebsiteMonitor",
         "WebsiteMonitorRequest",
@@ -70,6 +76,7 @@ def test_v2_exports_the_whole_public_surface():
         "from_api_incident",
         "from_api_location",
         "from_api_observation",
+        "from_api_subject",
         "from_api_website_monitor",
         "from_api_workspace",
     }

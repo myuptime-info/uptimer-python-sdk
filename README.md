@@ -137,6 +137,54 @@ except UptimerError:  # base error, if you need one
     raise
 ```
 
+### Subjects: what a workspace watches
+
+A **subject** is one monitored thing. Every subject is one of two kinds, and the
+kind says how it is configured:
+
+- **website** — Uptimer's own probe watches a URL, and the website check form
+  owns its signal and its rule;
+- **custom** — yours, reporting through the signals you add to it.
+
+Requires Uptimer 1.6.0 or later.
+
+```python
+from uptimer.client import UptimerClient
+from uptimer.models.v2 import SUBJECT_KIND_CUSTOM, CreateSubjectRequest
+
+client = UptimerClient(
+    api_key="your-api-key-here",
+    base_url="http://127.0.0.1:2517/api",
+)
+
+# Everything the workspace watches, both kinds.
+for subject in client.v2.subjects.all("your-workspace-id"):
+    print(subject.id, subject.subject_kind, subject.signal_count)
+
+# Create an empty custom subject. It arrives with nothing under it: no signal,
+# no rule, no HTTP probe — add a signal to it in the Uptimer UI, then report to
+# that signal with the observations API below.
+created = client.v2.subjects.create(
+    CreateSubjectRequest(name="Nightly export", workspace_id="your-workspace-id"),
+)
+assert created.subject_kind == SUBJECT_KIND_CUSTOM
+assert created.signal_count == 0
+
+# `id` is the subject's slug — the same name the observation route addresses it
+# by, and it never moves when the subject is renamed.
+fetched = client.v2.subjects.get(created.id, workspace_id="your-workspace-id")
+```
+
+`kind` and `subject_kind` are different fields on purpose. `kind` is `"subject"`
+on every one of these objects — it says what you are holding, the way every v2
+object does. `subject_kind` is `"website"` or `"custom"`. Switch on
+`subject_kind`, or use the `is_website` / `is_custom` properties.
+
+**Website monitoring is not created here.** It needs a URL, an interval and
+locations, so it has its own call — `client.v2.monitoring.websites.create` —
+and asking for `subject_kind="website"` on this route is refused with a message
+saying so.
+
 ### Reporting your own observations
 
 Uptimer probes websites itself. For anything else — a cron job, a queue worker,

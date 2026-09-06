@@ -2,6 +2,7 @@ from pytest_httpx import HTTPXMock
 
 from tests.conftest import api_response
 from uptimer.client import UptimerClient, UptimerCloudClient
+from uptimer.compat import MINIMUM_UPTIMER_VERSION
 from uptimer.endpoints.incidents import IncidentsEndpoint
 from uptimer.endpoints.locations import LocationsEndpoint
 from uptimer.endpoints.v2 import V2Endpoint
@@ -81,8 +82,11 @@ def test_check_compatibility_stays_on_the_unversioned_endpoint(
     httpx_mock: HTTPXMock,
     base_url: str,
 ):
-    httpx_mock.add_response(json=api_response("1.5.0"))
-    assert uptimer_client.check_compatibility() == "1.5.0"
+    # A server this SDK speaks to. The bar is the SDK's own major.minor, so the
+    # version here follows the package rather than being pinned to whatever was
+    # current when the test was written.
+    httpx_mock.add_response(json=api_response(_supported_server_version()))
+    assert uptimer_client.check_compatibility() == _supported_server_version()
     assert str(httpx_mock.get_requests()[0].url) == base_url + "/version"
 
 
@@ -90,10 +94,23 @@ def test_ensure_compatible_checks_once(
     uptimer_client: UptimerClient,
     httpx_mock: HTTPXMock,
 ):
-    httpx_mock.add_response(json=api_response("1.5.0"))
+    httpx_mock.add_response(json=api_response(_supported_server_version()))
     uptimer_client.ensure_compatible()
     uptimer_client.ensure_compatible()
     assert len(httpx_mock.get_requests()) == 1
+
+
+def _supported_server_version() -> str:
+    """
+    Return the oldest server this SDK accepts, as a version string.
+
+    Derived from MINIMUM_UPTIMER_VERSION rather than written down: that constant
+    is itself derived from the package version (Decision 0013), so a bump moves
+    both together. Hard-coding "1.5.0" here is what made these two tests fail
+    the moment the package became 1.6.
+    """
+    major, minor, patch = MINIMUM_UPTIMER_VERSION
+    return f"{major}.{minor}.{patch}"
 
 
 def test_get_workspaces(

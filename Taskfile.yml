@@ -1,5 +1,8 @@
 # Dev + git release tasks for the uptimer Python SDK. All tooling via `uv` (uv.lock).
 # PyPI publish lives in the private product repo: /work → task sdk:publish*
+#
+# HARD RULE: never publish an SDK prerelease (rc/a/b/dev) to TestPyPI or PyPI.
+# OSS/SaaS may cut RCs; this package ships final X.Y.Z only. Verify locally.
 version: '3'
 
 tasks:
@@ -27,9 +30,17 @@ tasks:
       - task: test
 
   release:
-    desc: 'Cut a release: cq, then `cz bump` (version + CHANGELOG + tag) + push. Commit first. Prefer manual tag when version is already set.'
+    desc: 'Cut a FINAL release only: cq, then `cz bump` (no --prerelease) + push. Never cut an SDK RC for PyPI. Commit first.'
     cmds:
       - task: cq
       - cz bump --yes
+      - |
+        ver=$(cz version --project)
+        case "$ver" in
+          *rc*|*RC*|*alpha*|*beta*|*dev*|*pre*)
+            echo "REFUSED: cz produced prerelease $ver — do not push or publish. SDK ships final X.Y.Z only." >&2
+            exit 1
+            ;;
+        esac
       - git push --follow-tags
-      - 'echo ">> released v$(cz version --project) — publish from /work: task sdk:publish:test, then task sdk:publish"'
+      - 'echo ">> released v$(cz version --project) — publish from /work only if FINAL: task sdk:publish:test, then task sdk:publish"'

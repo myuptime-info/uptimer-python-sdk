@@ -18,6 +18,7 @@ from .monitor import (
     WebsiteMonitorResponseBody,
 )
 from .observation import Observation
+from .subject import Subject
 from .workspace import Workspace
 
 T = TypeVar("T")
@@ -30,6 +31,7 @@ DeserializableType = Union[
     Incident,
     Location,
     Observation,
+    Subject,
     Workspace,
 ]
 
@@ -45,6 +47,7 @@ _KIND_REGISTRY = {
     "incident": Incident,
     "location": Location,
     "observation": Observation,
+    "subject": Subject,
     "workspace": Workspace,
 }
 
@@ -127,5 +130,14 @@ def from_api_observation(data: dict[str, Any]) -> Observation:
     obj = from_api(data)
     if not isinstance(obj, Observation):
         expected = "Observation"
+        raise TypeMismatchError(expected, type(obj).__name__)
+    return obj
+
+
+def from_api_subject(data: dict[str, Any]) -> Subject:
+    """Deserialize one monitored subject."""
+    obj = from_api(data)
+    if not isinstance(obj, Subject):
+        expected = "Subject"
         raise TypeMismatchError(expected, type(obj).__name__)
     return obj
