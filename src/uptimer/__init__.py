@@ -9,4 +9,4 @@ uptimer 1.6.0 and later. Patch numbers are independent, so an SDK fix can ship
 without a server release. See product Decision 0013.
 """
 
-__version__ = "1.6.0-rc.0"
+__version__ = "1.6.0"

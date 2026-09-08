@@ -1,3 +1,9 @@
+## 1.6.0 (2026-09-08)
+
+### Feat
+
+- **sdk**: list and create Website/Custom subjects
+
 ## 1.6.0-rc.0 (2026-08-30)
 
 ### Feat
