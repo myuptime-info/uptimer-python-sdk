@@ -99,13 +99,15 @@ class SignalEndpoint(BaseEndpoint):
 
 class SignalsEndpoint(BaseEndpoint):
     """
-    The signals of one subject.
+    The signals of one custom subject.
 
     Call it with a slug to reach one:
-    `client.v2.subjects("checkout").signals("worker-pulse")`.
+    `client.v2.subjects("nightly-export").signals("worker-pulse")`.
 
-    There is no listing or authoring here. Signals are created and managed in
-    the Uptimer UI; the SDK exists to report data to one that already exists.
+    There is no listing or authoring here. Uptimer 1.6.0 serves those routes —
+    the Signals screen has an API half — but this SDK does not wrap them yet:
+    add a signal in the Uptimer UI, and use this to report data to one that
+    already exists.
     """
 
     def __init__(
@@ -139,17 +141,20 @@ class SubjectEndpoint(BaseEndpoint):
 
 class SubjectsEndpoint(BaseEndpoint):
     """
-    The monitored subjects: what a workspace watches.
+    The workspace's CUSTOM monitored subjects.
+
+    Uptimer splits its API by subject kind: website monitoring is
+    `client.v2.monitoring.websites`, and this is the custom half. Neither one
+    serves the other's subjects — a website subject's slug is refused here.
 
     Two ways in, because there are two things to do with a subject:
 
     - call it with a slug to reach what is under one —
-      `client.v2.subjects("checkout").signals("worker-pulse").observations`;
+      `client.v2.subjects("nightly-export").signals("worker-pulse").observations`;
     - call the methods here to list, fetch, or create one.
 
-    There is no update or delete. A website subject is changed through its check
-    form, and deleting either kind takes its whole history with it — neither is
-    something to do by accident from a script.
+    There is no update or delete. Deleting a subject takes its whole history
+    with it, which is not something to do by accident from a script.
     """
 
     def __init__(
@@ -164,10 +169,12 @@ class SubjectsEndpoint(BaseEndpoint):
 
     def all(self, workspace_id: str) -> list[Subject]:
         """
-        Every subject in a workspace, of both kinds.
+        Every CUSTOM subject in a workspace.
 
-        Read `subject_kind` to tell them apart: a "website" subject is watched
-        by Uptimer's own probe, a "custom" one reports to you.
+        Website monitoring is not here — it is `client.v2.monitoring.websites`.
+        Against a 1.6.0 server every item reads `subject_kind == "custom"`;
+        `subject_kind` is still on the model, because an older server answered
+        this route with both kinds.
         """
         response = self.http.client.get(self.url, params={"workspace_id": workspace_id})
         result = self.http.parse_response(response=response)
@@ -175,13 +182,16 @@ class SubjectsEndpoint(BaseEndpoint):
 
     def get(self, subject_slug: str, workspace_id: str | None = None) -> Subject:
         """
-        One subject by its slug.
+        One custom subject by its slug.
 
         `workspace_id` is optional and settles an ambiguity rather than being
         required: a slug is unique within a workspace, not across them, so pass
         it when the same slug exists in two workspaces you belong to. Without
         it the server searches your memberships and says so if the answer is
         more than one.
+
+        A website subject's slug raises a DefaultUptimerApiError saying it is
+        managed elsewhere.
         """
         params = {"workspace_id": workspace_id} if workspace_id else None
         response = self.http.client.get(

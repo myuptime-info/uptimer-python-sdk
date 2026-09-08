@@ -137,7 +137,7 @@ except UptimerError:  # base error, if you need one
     raise
 ```
 
-### Subjects: what a workspace watches
+### Subjects: your custom monitoring
 
 A **subject** is one monitored thing. Every subject is one of two kinds, and the
 kind says how it is configured:
@@ -145,6 +145,11 @@ kind says how it is configured:
 - **website** — Uptimer's own probe watches a URL, and the website check form
   owns its signal and its rule;
 - **custom** — yours, reporting through the signals you add to it.
+
+Uptimer 1.6.0 splits its API along that line, and so does this SDK: website
+monitoring is `client.v2.monitoring.websites`, and `client.v2.subjects` is the
+**custom** half. Neither serves the other's subjects — passing a website
+subject's slug to a `subjects` call is refused.
 
 Requires Uptimer 1.6.0 or later.
 
@@ -157,7 +162,7 @@ client = UptimerClient(
     base_url="http://127.0.0.1:2517/api",
 )
 
-# Everything the workspace watches, both kinds.
+# The workspace's custom subjects. Website checks are not here.
 for subject in client.v2.subjects.all("your-workspace-id"):
     print(subject.id, subject.subject_kind, subject.signal_count)
 
@@ -177,13 +182,19 @@ fetched = client.v2.subjects.get(created.id, workspace_id="your-workspace-id")
 
 `kind` and `subject_kind` are different fields on purpose. `kind` is `"subject"`
 on every one of these objects — it says what you are holding, the way every v2
-object does. `subject_kind` is `"website"` or `"custom"`. Switch on
-`subject_kind`, or use the `is_website` / `is_custom` properties.
+object does. `subject_kind` says how the subject is configured, and against a
+1.6.0 server everything these calls return reads `"custom"`; `is_custom` is the
+typed way to read it. `SUBJECT_KIND_WEBSITE` and `is_website` stay in the model
+for a payload from an older server.
 
 **Website monitoring is not created here.** It needs a URL, an interval and
 locations, so it has its own call — `client.v2.monitoring.websites.create` —
 and asking for `subject_kind="website"` on this route is refused with a message
 saying so.
+
+**Signals and rules are added in the Uptimer UI.** Uptimer 1.6.0 also serves
+them over the API, under `/v2/subjects/{subject}/signals` and
+`/v2/subjects/{subject}/rules`; this SDK does not wrap those routes yet.
 
 ### Reporting your own observations
 

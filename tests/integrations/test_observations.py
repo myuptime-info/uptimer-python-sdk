@@ -7,9 +7,10 @@ so the run supplies them. Set
 
     UPTIMER_API_KEY, UPTIMER_SUBJECT_SLUG, UPTIMER_SIGNAL_SLUG
 
-and optionally UPTIMER_HTTP_SIGNAL_SLUG (a platform HTTP signal, to prove it is
-refused) and UPTIMER_URL. Without the first three the module skips, so a plain
-`--integration` run against a server with no custom signal stays green.
+and optionally UPTIMER_WEBSITE_SUBJECT_SLUG (a website subject, to prove the
+cross-kind refusal) and UPTIMER_URL. Without the first three the module skips,
+so a plain `--integration` run against a server with no custom signal stays
+green.
 """
 
 import os
@@ -32,7 +33,10 @@ from .conftest import get_client
 API_KEY = os.environ.get("UPTIMER_API_KEY", "")
 SUBJECT_SLUG = os.environ.get("UPTIMER_SUBJECT_SLUG", "")
 SIGNAL_SLUG = os.environ.get("UPTIMER_SIGNAL_SLUG", "")
-HTTP_SIGNAL_SLUG = os.environ.get("UPTIMER_HTTP_SIGNAL_SLUG", "")
+# A website subject's slug. Its platform HTTP signal carries the same slug, and
+# a website subject never carries a custom signal — the two kinds cannot share
+# one subject — so this is its own variable rather than a signal on SUBJECT_SLUG.
+WEBSITE_SUBJECT_SLUG = os.environ.get("UPTIMER_WEBSITE_SUBJECT_SLUG", "")
 
 needs_signal = pytest.mark.skipif(
     not (API_KEY and SUBJECT_SLUG and SIGNAL_SLUG),
@@ -128,16 +132,24 @@ def test_an_unknown_signal_is_refused(uptimer_url: str):
 
 @integration_test
 @pytest.mark.skipif(
-    not (API_KEY and SUBJECT_SLUG and HTTP_SIGNAL_SLUG),
-    reason="set UPTIMER_HTTP_SIGNAL_SLUG to prove the platform signal is refused",
+    not (API_KEY and WEBSITE_SUBJECT_SLUG),
+    reason="set UPTIMER_WEBSITE_SUBJECT_SLUG to prove the cross-kind refusal",
 )
-def test_a_platform_http_signal_is_refused(uptimer_url: str):
-    """Uptimer's own probe owns that stream; a posted claim is not a measurement."""
+def test_a_website_subject_refuses_a_posted_observation(uptimer_url: str):
+    """
+    Uptimer's own probe owns that stream; a posted claim is not a measurement.
+
+    1.6.0 refuses it at the subject: the whole /v2/subjects tree is custom
+    monitoring, so a website subject is turned away before its signal is even
+    looked up. The platform HTTP signal shares the subject's slug.
+    """
     client = get_client(API_KEY, uptimer_url)
     observations = (
-        client.v2.subjects(SUBJECT_SLUG).signals(HTTP_SIGNAL_SLUG).observations
+        client.v2.subjects(WEBSITE_SUBJECT_SLUG)
+        .signals(WEBSITE_SUBJECT_SLUG)
+        .observations
     )
 
     with pytest.raises(DefaultUptimerApiError) as excinfo:
         observations.create(CreateObservationRequest(status=OBSERVATION_STATUS_OK))
-    assert excinfo.value.error_type == "forbidden"
+    assert "managed elsewhere" in excinfo.value.message

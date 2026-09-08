@@ -8,6 +8,11 @@ from dataclasses import dataclass
 # the check form owns its signal and its rule. A CUSTOM subject is yours —
 # you add heartbeat and event signals and report to them yourself.
 #
+# Uptimer 1.6.0 splits the API along that line: `client.v2.subjects` serves
+# CUSTOM subjects only, so everything it returns reads "custom". WEBSITE stays
+# here because it is still the value on a website subject, and because an older
+# server answered that route with both kinds.
+#
 # This is not the object's `kind`. Every v2 object carries `kind` to say WHAT it
 # is ("subject"); `subject_kind` says how this particular one is configured. The
 # two are separate fields on purpose, so a client switching on `kind` keeps
@@ -46,10 +51,9 @@ class Subject:
     first half of the observation route, and a rename never moves it. There is
     no database id in the payload.
 
-    `signal_count` and `rule_count` are how much is under the subject. They are
-    here because there is no signals or rules collection in this release, so
-    they are the only way to see that a subject you just created really is
-    empty.
+    `signal_count` and `rule_count` are how much is under the subject. This SDK
+    wraps no signals or rules collection, so they are the way to see that a
+    subject you just created really is empty.
     """
 
     id: str
