@@ -5,15 +5,22 @@ from typing import TYPE_CHECKING
 from urllib.parse import quote
 
 from uptimer.endpoints.endpoint import BaseEndpoint
-from uptimer.models.v2 import from_api_observation, from_api_subject
+from uptimer.models.v2 import (
+    from_api_acknowledgement,
+    from_api_observation,
+    from_api_subject,
+    from_api_subject_incident,
+)
 
 if TYPE_CHECKING:
     from uptimer.http import UptimerHttpLib
     from uptimer.models.v2 import (
         CreateObservationRequest,
         CreateSubjectRequest,
+        IncidentAcknowledgement,
         Observation,
         Subject,
+        SubjectIncident,
     )
 
 
@@ -124,19 +131,115 @@ class SignalsEndpoint(BaseEndpoint):
         return [*self._parent_segments, self.segment]
 
 
+class SubjectIncidentEndpoint(BaseEndpoint):
+    """One incident of a custom subject, addressed by its opaque id."""
+
+    def __init__(
+        self,
+        http: UptimerHttpLib,
+        incident_id: str,
+        parent_segments: str | list[str] | None = None,
+        workspace_id: str | None = None,
+    ):
+        super().__init__(http, _slug(incident_id, "incident"), parent_segments)
+        self._workspace_id = workspace_id
+
+    def acknowledge(self) -> IncidentAcknowledgement:
+        """
+        Record that you have seen THIS incident. Requires uptimer 1.7.0+.
+
+        It says a person looked; it changes nothing the engine decided. The
+        verdict, the evidence and the close hold carry on, and alerting is
+        untouched — acknowledging does not silence anything.
+
+        There is no body and no actor argument: the person recorded is the owner
+        of the API key, and the time is the time of the call. The server refuses
+        a body rather than letting one client file an acknowledgement under
+        another person's name.
+
+        Repeating it is safe. A second call records nothing, adds no second
+        history entry, and returns the FIRST person's name and time with
+        `recorded=False`.
+
+        Raises DefaultUptimerApiError when the incident is not this subject's —
+        another subject's, another workspace's, or a website monitor's — and
+        when it has closed. Nothing is retried through the other family: a
+        website incident is acknowledged through `client.v1.rules(...)`, and
+        this method will not do it for you.
+        """
+        params = {"workspace_id": self._workspace_id} if self._workspace_id else None
+        response = self.http.client.post(f"{self.url}/acknowledge", params=params)
+        result = self.http.parse_response(response=response)
+        return from_api_acknowledgement(result)
+
+
+class SubjectIncidentsEndpoint(BaseEndpoint):
+    """
+    The OPEN incidents of one custom subject. Requires uptimer 1.7.0+.
+
+    This is where an acknowledgement target comes from. The acknowledge call
+    takes one exact incident id and refuses to guess — a subject can have
+    several incidents open at once — so the flow is: list these, choose the one
+    you mean, acknowledge it by id.
+
+    `client.v2.incidents` is the WEBSITE list and does not serve custom
+    subjects; this is its custom counterpart, scoped to one subject.
+    """
+
+    def __init__(
+        self,
+        http: UptimerHttpLib,
+        parent_segments: str | list[str] | None = None,
+        workspace_id: str | None = None,
+    ):
+        super().__init__(http, "incidents", parent_segments)
+        self._workspace_id = workspace_id
+
+    def __call__(self, incident_id: str) -> SubjectIncidentEndpoint:
+        return SubjectIncidentEndpoint(
+            self.http,
+            incident_id,
+            [*self._parent_segments, self.segment],
+            self._workspace_id,
+        )
+
+    def all(self) -> list[SubjectIncident]:
+        """
+        Every open incident of this subject, newest trouble first.
+
+        Open ones only, and all of them: pending, recovering and no-data
+        included, and already-acknowledged ones too — that somebody is on one is
+        half of what this answers. A subject with nothing wrong returns [].
+
+        Closed history is not here; it lives on the subject timeline in the
+        dashboard.
+        """
+        params = {"workspace_id": self._workspace_id} if self._workspace_id else None
+        response = self.http.client.get(self.url, params=params)
+        result = self.http.parse_response(response=response)
+        return [from_api_subject_incident(item) for item in result]
+
+
 class SubjectEndpoint(BaseEndpoint):
     """One monitored subject, addressed by its slug."""
 
     signals: SignalsEndpoint
+    incidents: SubjectIncidentsEndpoint
 
     def __init__(
         self,
         http: UptimerHttpLib,
         subject_slug: str,
         parent_segments: str | list[str] | None = None,
+        workspace_id: str | None = None,
     ):
         super().__init__(http, _slug(subject_slug, "subject"), parent_segments)
         self.signals = SignalsEndpoint(http, [*self._parent_segments, self.segment])
+        self.incidents = SubjectIncidentsEndpoint(
+            http,
+            [*self._parent_segments, self.segment],
+            workspace_id,
+        )
 
 
 class SubjectsEndpoint(BaseEndpoint):
@@ -164,8 +267,21 @@ class SubjectsEndpoint(BaseEndpoint):
     ):
         super().__init__(http, "subjects", parent_segments)
 
-    def __call__(self, subject_slug: str) -> SubjectEndpoint:
-        return SubjectEndpoint(self.http, subject_slug, [*self._parent_segments, self.segment])
+    def __call__(self, subject_slug: str, workspace_id: str | None = None) -> SubjectEndpoint:
+        """
+        Reach one subject by slug.
+
+        `workspace_id` settles an ambiguity rather than being required: a slug
+        is unique within a workspace, not across them. Pass it when the same
+        slug exists in two workspaces you belong to, and the incident routes
+        under this subject will carry it.
+        """
+        return SubjectEndpoint(
+            self.http,
+            subject_slug,
+            [*self._parent_segments, self.segment],
+            workspace_id,
+        )
 
     def all(self, workspace_id: str) -> list[Subject]:
         """

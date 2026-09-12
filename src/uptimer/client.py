@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import cast
 
 from uptimer.compat import ensure_v2_supported
+from uptimer.endpoints.v1 import V1Endpoint
 from uptimer.endpoints.v2 import V2Endpoint
 from uptimer.http import UptimerHttpLib
 
@@ -14,14 +15,20 @@ class UptimerClient:
     Resources are reached through the API version that serves them:
     `client.v2.workspaces`, `client.v2.locations`, `client.v2.incidents`,
     `client.v2.monitoring.websites` and
-    `client.v2.subjects(subject).signals(signal).observations`. This SDK does
-    not speak API v1 — see the migration note in the README if you are coming
-    from 0.4.x.
+    `client.v2.subjects(subject).signals(signal).observations`.
+
+    This is a v2 client. `client.v1` exists for one thing only: uptimer 1.7.0
+    serves WEBSITE incident acknowledgement under `/v1/rules/...`, because
+    website monitoring is v1's resource and custom monitoring is v2's. Reading
+    and writing website monitors themselves stays on
+    `client.v2.monitoring.websites` — see the migration note in the README if
+    you are coming from 0.4.x.
 
     `version()` and the compatibility helpers stay here rather than under a
     version namespace, because `/version` is shared and unversioned.
     """
 
+    v1: V1Endpoint
     v2: V2Endpoint
 
     def __init__(self, api_key: str, base_url: str):
@@ -30,6 +37,7 @@ class UptimerClient:
         self._wire()
 
     def _wire(self) -> None:
+        self.v1 = V1Endpoint(self._http_lib)
         self.v2 = V2Endpoint(self._http_lib)
 
     def version(self) -> str:

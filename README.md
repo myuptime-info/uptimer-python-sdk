@@ -253,6 +253,97 @@ Retries are safe. An observation is identified by its signal, its `observed_at`
 and its labels, so re-sending the same one replaces it rather than counting
 twice.
 
+### Acknowledging an incident
+
+**New in 1.7.0.** Acknowledging says a **person has seen** an open incident. It
+changes nothing the engine decided — the verdict, the evidence, the close hold
+and the alerting all carry on — and it is recorded once, with who and when.
+
+Each kind of monitoring acknowledges through **its own family**, the same split
+subjects follow: a website incident under its monitor on v1, a custom incident
+under its subject on v2. Neither method falls back to the other, and there is no
+kind-agnostic one: acknowledging is a claim about a specific incident, and an
+SDK that guessed which family it belonged to could claim the wrong one.
+
+**Availability.** These methods are part of the SDK's **1.7.0** release: they are
+not in the published 1.6.0 package, so until 1.7.0 is on PyPI use them from a
+checkout of this repository. They need a matching **Uptimer 1.7.0+** server —
+the routes do not exist before that — and on
+[myuptime.info](https://myuptime.info) they arrive when the hosted service picks
+up the 1.7.0 API.
+
+**Custom monitoring** — list the subject's open incidents, pick one, acknowledge
+it by id:
+
+```python
+from uptimer.client import UptimerClient
+
+client = UptimerClient(
+    api_key="your-api-key-here",
+    base_url="http://127.0.0.1:2517/api",
+)
+
+subject = client.v2.subjects("payments-worker", "your-workspace-id")
+
+# Open incidents of this subject: all of them, newest trouble first. A subject
+# can have one open per rule, so each names the rule that opened it.
+open_incidents = subject.incidents.all()
+for incident in open_incidents:
+    print(incident.id, incident.rule_name, incident.status, incident.acknowledged)
+
+# Nothing open is an ordinary answer, not an error.
+if open_incidents:
+    # Acknowledge the one you mean, by the id the listing gave you. No body and
+    # no actor argument: the person recorded is the owner of the API key, at the
+    # time of the call.
+    target = open_incidents[0]
+    record = subject.incidents(target.id).acknowledge()
+    print(record.acknowledged_by, record.acknowledged_at, record.recorded)
+```
+
+**Website monitoring** — the ids come from the workspace incident list this SDK
+has had since 1.5.0, which already names each incident's monitor:
+
+```python
+# An empty list means nothing is wrong: the loop simply does not run.
+for incident in client.v2.incidents.all("your-workspace-id"):
+    record = client.v1.rules(incident.monitor_id).incidents(incident.id).acknowledge()
+    print(record.incident_id, record.acknowledged_by, record.recorded)
+```
+
+`client.v1` exists for this one route. This is still a v2 client — website
+monitors are read and written through `client.v2.monitoring.websites` — but
+Uptimer serves website acknowledgement under `/v1/rules/...`, because website
+monitoring is v1's resource and custom monitoring is v2's.
+
+What the answer says:
+
+| field | meaning |
+|---|---|
+| `recorded` | whether **this call** wrote it. `False` means it was already acknowledged and nothing changed |
+| `acknowledged_by` / `acknowledged_at` | the record — on a repeat, the **first** person's name and time, not yours |
+| `status` | the incident's condition, unchanged by acknowledging it |
+| `monitor_id` | set for a website incident; `None` for a custom one |
+| `subject_id` / `rule_id` | set for a custom incident; `None` for a website one |
+| `closed_at` | set if the incident had already closed |
+
+**Repeating it is safe.** A second call adds no second history entry and returns
+the original name and time with `recorded=False` — so a retry after a timeout is
+not a second claim.
+
+**Refusals are raised, never worked around.** A `DefaultUptimerApiError` means
+the incident is not this parent's — another monitor's, another subject's,
+another workspace's, or the other kind of monitoring. Nothing is retried through
+the other family.
+
+**Closing cuts both ways, and the two are different.** A **first**
+acknowledgement of an incident that has already closed is refused
+(`Incident is closed`): there is nothing left to be on, and anything open now is
+a different incident. But an incident acknowledged **while it was open** keeps
+that record after it closes, so asking again is not an error — it answers the
+original name and time with `recorded=False` and `closed_at` set. The look did
+happen.
+
 ### Incident status
 
 `client.v2.incidents.all()` returns only **open** incidents. `status` carries the

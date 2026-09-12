@@ -9,6 +9,7 @@ from uptimer.models.errors import (
     UnknownKindError,
 )
 
+from .acknowledgement import IncidentAcknowledgement, SubjectIncident
 from .incident import Incident, IncidentLocations
 from .location import Location
 from .monitor import (
@@ -29,9 +30,11 @@ DeserializableType = Union[
     WebsiteMonitorResponse,
     WebsiteMonitorResponseBody,
     Incident,
+    IncidentAcknowledgement,
     Location,
     Observation,
     Subject,
+    SubjectIncident,
     Workspace,
 ]
 
@@ -45,6 +48,8 @@ _KIND_REGISTRY = {
     "website_monitor_response": WebsiteMonitorResponse,
     "website_monitor_response_body": WebsiteMonitorResponseBody,
     "incident": Incident,
+    "incident_acknowledgement": IncidentAcknowledgement,
+    "subject_incident": SubjectIncident,
     "location": Location,
     "observation": Observation,
     "subject": Subject,
@@ -130,6 +135,24 @@ def from_api_observation(data: dict[str, Any]) -> Observation:
     obj = from_api(data)
     if not isinstance(obj, Observation):
         expected = "Observation"
+        raise TypeMismatchError(expected, type(obj).__name__)
+    return obj
+
+
+def from_api_subject_incident(data: dict[str, Any]) -> SubjectIncident:
+    """Deserialize one open incident of a custom subject."""
+    obj = from_api(data)
+    if not isinstance(obj, SubjectIncident):
+        expected = "SubjectIncident"
+        raise TypeMismatchError(expected, type(obj).__name__)
+    return obj
+
+
+def from_api_acknowledgement(data: dict[str, Any]) -> IncidentAcknowledgement:
+    """Deserialize the record an acknowledgement left behind."""
+    obj = from_api(data)
+    if not isinstance(obj, IncidentAcknowledgement):
+        expected = "IncidentAcknowledgement"
         raise TypeMismatchError(expected, type(obj).__name__)
     return obj
 

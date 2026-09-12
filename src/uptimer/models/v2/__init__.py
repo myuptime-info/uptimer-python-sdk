@@ -9,12 +9,18 @@ Version-independent deserialization exceptions live in `uptimer.models.errors`,
 because they say nothing about which API version raised them.
 """
 
+from .acknowledgement import (
+    IncidentAcknowledgement,
+    SubjectIncident,
+)
 from .deserialize import (
     from_api,
+    from_api_acknowledgement,
     from_api_incident,
     from_api_location,
     from_api_observation,
     from_api_subject,
+    from_api_subject_incident,
     from_api_website_monitor,
     from_api_workspace,
 )
@@ -88,10 +94,12 @@ __all__ = [
     "CreateWebsiteMonitorRequest",
     "DeleteWebsiteMonitorResponse",
     "Incident",
+    "IncidentAcknowledgement",
     "IncidentLocations",
     "Location",
     "Observation",
     "Subject",
+    "SubjectIncident",
     "UpdateWebsiteMonitorRequest",
     "WebsiteMonitor",
     "WebsiteMonitorRequest",
@@ -99,10 +107,12 @@ __all__ = [
     "WebsiteMonitorResponseBody",
     "Workspace",
     "from_api",
+    "from_api_acknowledgement",
     "from_api_incident",
     "from_api_location",
     "from_api_observation",
     "from_api_subject",
+    "from_api_subject_incident",
     "from_api_website_monitor",
     "from_api_workspace",
 ]

@@ -62,10 +62,15 @@ def test_v2_exports_the_whole_public_surface():
         "CreateWebsiteMonitorRequest",
         "DeleteWebsiteMonitorResponse",
         "Incident",
+        # Acknowledgement (1.7.0). One object comes back from both families —
+        # the v1 website route and the v2 custom one — so it is typed once,
+        # here with the rest of the 1.7.0 payloads.
+        "IncidentAcknowledgement",
         "IncidentLocations",
         "Location",
         "Observation",
         "Subject",
+        "SubjectIncident",
         "UpdateWebsiteMonitorRequest",
         "WebsiteMonitor",
         "WebsiteMonitorRequest",
@@ -73,10 +78,12 @@ def test_v2_exports_the_whole_public_surface():
         "WebsiteMonitorResponseBody",
         "Workspace",
         "from_api",
+        "from_api_acknowledgement",
         "from_api_incident",
         "from_api_location",
         "from_api_observation",
         "from_api_subject",
+        "from_api_subject_incident",
         "from_api_website_monitor",
         "from_api_workspace",
     }

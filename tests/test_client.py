@@ -5,6 +5,7 @@ from uptimer.client import UptimerClient, UptimerCloudClient
 from uptimer.compat import MINIMUM_UPTIMER_VERSION
 from uptimer.endpoints.incidents import IncidentsEndpoint
 from uptimer.endpoints.locations import LocationsEndpoint
+from uptimer.endpoints.v1 import RulesEndpoint, V1Endpoint
 from uptimer.endpoints.v2 import V2Endpoint
 from uptimer.endpoints.websites import MonitoringEndpoint
 from uptimer.endpoints.workspaces import WorkspacesEndpoint
@@ -31,8 +32,32 @@ def test_client_keeps_no_root_level_aliases(uptimer_client: UptimerClient):
         assert not hasattr(uptimer_client, resource), (
             f"client.{resource} must only be reachable as client.v2.{resource}"
         )
-    # 1.5.x targets API v2 only; there is no v1 namespace to fall back to.
-    assert not hasattr(uptimer_client, "v1")
+    # This is still a v2 client. `client.v1` exists, and holds ONE thing:
+    # website incident acknowledgement, which uptimer 1.7.0 serves under
+    # /v1/rules because website monitoring is v1's resource (Decision 0015).
+    # Reading and writing monitors stays on client.v2.monitoring.websites.
+    assert isinstance(uptimer_client.v1, V1Endpoint)
+    assert isinstance(uptimer_client.v1.rules, RulesEndpoint)
+    for resource in V2_RESOURCES:
+        assert not hasattr(uptimer_client.v1, resource), (
+            f"v1.{resource} would make the version namespaces overlap"
+        )
+
+
+def test_v1_is_the_acknowledgement_door_and_nothing_else(uptimer_client: UptimerClient):
+    """
+    v1 wraps one route, addressed the way the API addresses it.
+
+    A rules listing or create here would rebuild the v1 client this SDK
+    deliberately does not have — those live on client.v2.monitoring.websites.
+    """
+    rules = uptimer_client.v1.rules
+    for method in ("all", "get", "create", "update", "delete"):
+        assert not hasattr(rules, method), f"v1.rules.{method} belongs to v2"
+
+    incident = rules("mon-1").incidents("inc-1")
+    assert incident.url == "http://127.0.0.1:2519/v1/rules/mon-1/incidents/inc-1"
+    assert hasattr(incident, "acknowledge")
 
 
 def test_cloud_client_exposes_the_same_namespace():
