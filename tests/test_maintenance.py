@@ -2,9 +2,11 @@
 Maintenance windows: `client.v2.subjects(slug).maintenance`.
 
 A window holds back one subject's problem notifications until a time the
-operator chose. What these pin is the shape of that: three operations and no
-update, "nothing scheduled" answered as None rather than raised, and the one
-promise the payload makes out loud — recoveries are never muted.
+operator chose. What these pin is the shape of that: four operations — read,
+start, move the end, end it early — with "nothing scheduled" answered as None
+rather than raised, moving the end an update rather than a cancel and a new
+window, and the one promise the payload makes out loud: recoveries are never
+muted.
 
 The payloads are copied from a real 1.7.0 server's answers.
 """
@@ -185,3 +187,85 @@ def test_the_window_deserializes_from_the_real_payload():
     assert isinstance(window, MaintenanceWindow)
     assert window.kind == "maintenance_window"
     assert window.subject_id == "payments-worker"
+
+
+def test_update_end_moves_the_running_window(
+    httpx_mock: HTTPXMock,
+    uptimer_client: UptimerClient,
+):
+    """
+    It POSTs to its own path, because POSTing the collection means "start one".
+
+    And it is an update: one request, no cancel, no second window.
+    """
+    httpx_mock.add_response(
+        url="http://127.0.0.1:2519/v2/subjects/payments-worker/maintenance/ends_at",
+        method="POST",
+        json=api_response({**RUNNING, "ends_at": "2026-09-13T15:00:00Z"}),
+    )
+
+    window = uptimer_client.v2.subjects("payments-worker").maintenance.update_end(
+        "2026-09-13T15:00:00Z",
+    )
+
+    assert window.active
+    assert window.ends_at == "2026-09-13T15:00:00Z"
+    assert window.cancelled_at is None
+    assert len(httpx_mock.get_requests()) == 1
+
+
+def test_update_end_carries_the_workspace(httpx_mock: HTTPXMock, uptimer_client: UptimerClient):
+    httpx_mock.add_response(
+        url="http://127.0.0.1:2519/v2/subjects/payments-worker/maintenance/ends_at?workspace_id=ws-2",
+        method="POST",
+        json=api_response(RUNNING),
+    )
+
+    uptimer_client.v2.subjects("payments-worker", "ws-2").maintenance.update_end(
+        "2026-09-13T15:00:00Z",
+    )
+
+
+def test_moving_the_end_into_the_past_is_raised(
+    httpx_mock: HTTPXMock,
+    uptimer_client: UptimerClient,
+):
+    """To stop a window now you cancel it; moving its end backwards is a mistake."""
+    httpx_mock.add_response(
+        json=api_response(
+            None,
+            error={
+                "code": 2001,
+                "error_type": "validation_error",
+                "message": "invalid ends_at",
+                "details": "A maintenance window has to end in the future. Nothing was changed. "
+                "To stop it now, cancel it instead.",
+            },
+        ),
+    )
+
+    with pytest.raises(DefaultUptimerApiError) as raised:
+        uptimer_client.v2.subjects("payments-worker").maintenance.update_end("2020-01-01T00:00:00Z")
+
+    assert raised.value.code == 2001
+
+
+def test_moving_the_end_with_nothing_running_is_raised(
+    httpx_mock: HTTPXMock,
+    uptimer_client: UptimerClient,
+):
+    httpx_mock.add_response(
+        json=api_response(
+            None,
+            error={
+                "code": 2002,
+                "error_type": "not_found",
+                "message": "No maintenance window",
+                "details": "This subject has no maintenance window running, "
+                "so there is no end to move.",
+            },
+        ),
+    )
+
+    with pytest.raises(DefaultUptimerApiError, match="No maintenance window"):
+        uptimer_client.v2.subjects("payments-worker").maintenance.update_end("2026-09-13T15:00:00Z")

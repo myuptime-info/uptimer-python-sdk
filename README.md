@@ -364,13 +364,21 @@ if maintenance.get() is None:
     window = maintenance.start("2026-09-13T18:00:00Z")
     print(window.active, window.ends_at, window.muted)
 
-# When the work is done. Notifications are normal again immediately.
+# The work is taking longer: move the end of the SAME window.
+maintenance.update_end("2026-09-13T20:00:00Z")
+
+# When it is done. Notifications are normal again immediately.
 maintenance.cancel()
 ```
 
-`ends_at` is RFC 3339 and carries its own zone. The window starts
-**immediately**, and there is no update: cancel and start again rather than
-editing, so nobody's "until when" moves under them.
+`ends_at` is RFC 3339 and carries its own zone, for both `start` and
+`update_end`. The window starts **immediately**.
+
+`update_end` is a real update, not a cancel and a new window: it keeps the
+window's identity and its start, so "since when have we been silencing this?"
+keeps one answer and nothing sees the subject briefly leave maintenance. Moving
+the end into the past raises rather than stopping the window — to stop it now,
+`cancel()`.
 
 `MaintenanceWindow` tells its three states apart by its fields — `active` true
 is running, `cancelled_at` set is ended early, and neither is a window that ran

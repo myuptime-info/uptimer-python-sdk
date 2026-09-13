@@ -231,8 +231,9 @@ class MaintenanceEndpoint(BaseEndpoint):
     timeline records all of it — so afterwards the outage reads exactly as it
     happened. Recoveries are never held back.
 
-    Three operations and no more. There is no update: a window is cancelled and
-    started again rather than edited, so nobody's "until when" moves under them.
+    Four operations: read it, start one, move its end, end it early. Moving the
+    end is a real update — the window keeps its identity and its start, and
+    nothing that reads it sees the subject briefly leave maintenance.
     """
 
     def __init__(
@@ -274,6 +275,29 @@ class MaintenanceEndpoint(BaseEndpoint):
         """
         response = self.http.client.post(
             self.url,
+            params=self._params(),
+            json={"ends_at": ends_at},
+        )
+        result = self.http.parse_response(response=response)
+        return from_api_maintenance(result)
+
+    def update_end(self, ends_at: str) -> MaintenanceWindow:
+        """
+        Move the end of the window that is already running.
+
+        It is an UPDATE, not a cancel and a new window: the window keeps its
+        identity and its start, so "since when have we been silencing this?"
+        keeps one answer, and nothing that reads it sees the subject briefly
+        leave maintenance. Nothing is notified — moving an end time is a
+        correction to a plan, not an event.
+
+        `ends_at` is RFC 3339, as it is for `start`. A time that has already
+        passed raises rather than ending the window: to stop it now, call
+        `cancel()`. So does a subject with nothing running — there is no end to
+        move — and a caller who is not an editor.
+        """
+        response = self.http.client.post(
+            f"{self.url}/ends_at",
             params=self._params(),
             json={"ends_at": ends_at},
         )
