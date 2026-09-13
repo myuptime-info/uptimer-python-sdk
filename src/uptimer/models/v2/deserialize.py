@@ -12,6 +12,7 @@ from uptimer.models.errors import (
 from .acknowledgement import IncidentAcknowledgement, SubjectIncident
 from .incident import Incident, IncidentLocations
 from .location import Location
+from .maintenance import MaintenanceWindow
 from .monitor import (
     WebsiteMonitor,
     WebsiteMonitorRequest,
@@ -32,6 +33,7 @@ DeserializableType = Union[
     Incident,
     IncidentAcknowledgement,
     Location,
+    MaintenanceWindow,
     Observation,
     Subject,
     SubjectIncident,
@@ -50,6 +52,7 @@ _KIND_REGISTRY = {
     "incident": Incident,
     "incident_acknowledgement": IncidentAcknowledgement,
     "subject_incident": SubjectIncident,
+    "maintenance_window": MaintenanceWindow,
     "location": Location,
     "observation": Observation,
     "subject": Subject,
@@ -153,6 +156,15 @@ def from_api_acknowledgement(data: dict[str, Any]) -> IncidentAcknowledgement:
     obj = from_api(data)
     if not isinstance(obj, IncidentAcknowledgement):
         expected = "IncidentAcknowledgement"
+        raise TypeMismatchError(expected, type(obj).__name__)
+    return obj
+
+
+def from_api_maintenance(data: dict[str, Any]) -> MaintenanceWindow:
+    """Deserialize one maintenance window."""
+    obj = from_api(data)
+    if not isinstance(obj, MaintenanceWindow):
+        expected = "MaintenanceWindow"
         raise TypeMismatchError(expected, type(obj).__name__)
     return obj
 

@@ -68,6 +68,8 @@ def test_v2_exports_the_whole_public_surface():
         "IncidentAcknowledgement",
         "IncidentLocations",
         "Location",
+        # A maintenance window (1.7.0): the subject is silenced on purpose.
+        "MaintenanceWindow",
         "Observation",
         "Subject",
         "SubjectIncident",
@@ -81,6 +83,7 @@ def test_v2_exports_the_whole_public_surface():
         "from_api_acknowledgement",
         "from_api_incident",
         "from_api_location",
+        "from_api_maintenance",
         "from_api_observation",
         "from_api_subject",
         "from_api_subject_incident",

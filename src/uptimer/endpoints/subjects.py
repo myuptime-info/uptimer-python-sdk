@@ -7,6 +7,7 @@ from urllib.parse import quote
 from uptimer.endpoints.endpoint import BaseEndpoint
 from uptimer.models.v2 import (
     from_api_acknowledgement,
+    from_api_maintenance,
     from_api_observation,
     from_api_subject,
     from_api_subject_incident,
@@ -18,6 +19,7 @@ if TYPE_CHECKING:
         CreateObservationRequest,
         CreateSubjectRequest,
         IncidentAcknowledgement,
+        MaintenanceWindow,
         Observation,
         Subject,
         SubjectIncident,
@@ -220,11 +222,83 @@ class SubjectIncidentsEndpoint(BaseEndpoint):
         return [from_api_subject_incident(item) for item in result]
 
 
+class MaintenanceEndpoint(BaseEndpoint):
+    """
+    The maintenance window of one custom subject. Requires uptimer 1.7.0+.
+
+    A window holds back this subject's PROBLEM notifications until the time you
+    choose. Nothing else changes: monitoring runs, incidents open and close, the
+    timeline records all of it — so afterwards the outage reads exactly as it
+    happened. Recoveries are never held back.
+
+    Three operations and no more. There is no update: a window is cancelled and
+    started again rather than edited, so nobody's "until when" moves under them.
+    """
+
+    def __init__(
+        self,
+        http: UptimerHttpLib,
+        parent_segments: str | list[str] | None = None,
+        workspace_id: str | None = None,
+    ):
+        super().__init__(http, "maintenance", parent_segments)
+        self._workspace_id = workspace_id
+
+    def _params(self) -> dict | None:
+        return {"workspace_id": self._workspace_id} if self._workspace_id else None
+
+    def get(self) -> MaintenanceWindow | None:
+        """
+        Return the window running on this subject, or None.
+
+        None is an ANSWER, not an error: a script checking whether it is safe to
+        deploy should not have to catch an exception for the ordinary case.
+        """
+        response = self.http.client.get(self.url, params=self._params())
+        result = self.http.parse_response(response=response)
+        if result is None:
+            return None
+        return from_api_maintenance(result)
+
+    def start(self, ends_at: str) -> MaintenanceWindow:
+        """
+        Start a window now, ending at `ends_at`.
+
+        `ends_at` is an RFC 3339 timestamp and carries its own zone, so there is
+        nothing to guess — pass "2026-09-13T18:00:00Z" or your own offset.
+
+        Raises DefaultUptimerApiError when the time has already passed, when a
+        window is already running on this subject (cancel it first), when the
+        subject is a website check — those are managed from the dashboard — or
+        when the caller is not an editor of that workspace.
+        """
+        response = self.http.client.post(
+            self.url,
+            params=self._params(),
+            json={"ends_at": ends_at},
+        )
+        result = self.http.parse_response(response=response)
+        return from_api_maintenance(result)
+
+    def cancel(self) -> MaintenanceWindow:
+        """
+        End the running window now, and return it as it was recorded.
+
+        Notifications are back to normal immediately. Raises
+        DefaultUptimerApiError when there is nothing to cancel: "it was already
+        over" is worth knowing rather than reporting as success.
+        """
+        response = self.http.client.delete(self.url, params=self._params())
+        result = self.http.parse_response(response=response)
+        return from_api_maintenance(result)
+
+
 class SubjectEndpoint(BaseEndpoint):
     """One monitored subject, addressed by its slug."""
 
     signals: SignalsEndpoint
     incidents: SubjectIncidentsEndpoint
+    maintenance: MaintenanceEndpoint
 
     def __init__(
         self,
@@ -236,6 +310,11 @@ class SubjectEndpoint(BaseEndpoint):
         super().__init__(http, _slug(subject_slug, "subject"), parent_segments)
         self.signals = SignalsEndpoint(http, [*self._parent_segments, self.segment])
         self.incidents = SubjectIncidentsEndpoint(
+            http,
+            [*self._parent_segments, self.segment],
+            workspace_id,
+        )
+        self.maintenance = MaintenanceEndpoint(
             http,
             [*self._parent_segments, self.segment],
             workspace_id,

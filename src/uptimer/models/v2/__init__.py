@@ -18,6 +18,7 @@ from .deserialize import (
     from_api_acknowledgement,
     from_api_incident,
     from_api_location,
+    from_api_maintenance,
     from_api_observation,
     from_api_subject,
     from_api_subject_incident,
@@ -34,6 +35,7 @@ from .incident import (
     IncidentLocations,
 )
 from .location import Location
+from .maintenance import MaintenanceWindow
 from .monitor import (
     AGREEMENT_ALL,
     AGREEMENT_ANY,
@@ -97,6 +99,7 @@ __all__ = [
     "IncidentAcknowledgement",
     "IncidentLocations",
     "Location",
+    "MaintenanceWindow",
     "Observation",
     "Subject",
     "SubjectIncident",
@@ -110,6 +113,7 @@ __all__ = [
     "from_api_acknowledgement",
     "from_api_incident",
     "from_api_location",
+    "from_api_maintenance",
     "from_api_observation",
     "from_api_subject",
     "from_api_subject_incident",

@@ -344,6 +344,41 @@ that record after it closes, so asking again is not an error — it answers the
 original name and time with `recorded=False` and `closed_at` set. The look did
 happen.
 
+### Maintenance windows
+
+**New in 1.7.0.** A maintenance window holds back one subject's **problem**
+notifications until a time you choose — for a deploy, a migration, anything that
+will make it look broken on purpose. Monitoring, incidents and the timeline are
+untouched, and **recoveries are never held back**: "it is back" is the message
+you most want afterwards.
+
+Same availability as acknowledgement above: the SDK's 1.7.0 release against an
+uptimer 1.7.0+ server, Custom subjects only (a website check is put into
+maintenance from its page in the dashboard).
+
+```python
+maintenance = client.v2.subjects("payments-worker", "your-workspace-id").maintenance
+
+# Nothing scheduled is None — an answer, not an error.
+if maintenance.get() is None:
+    window = maintenance.start("2026-09-13T18:00:00Z")
+    print(window.active, window.ends_at, window.muted)
+
+# When the work is done. Notifications are normal again immediately.
+maintenance.cancel()
+```
+
+`ends_at` is RFC 3339 and carries its own zone. The window starts
+**immediately**, and there is no update: cancel and start again rather than
+editing, so nobody's "until when" moves under them.
+
+`MaintenanceWindow` tells its three states apart by its fields — `active` true
+is running, `cancelled_at` set is ended early, and neither is a window that ran
+out — and `muted` says what waits, in the server's own words.
+
+A past end time, a window already running, a website subject, or a caller who is
+not an editor raise `DefaultUptimerApiError`. Reading takes the viewer role.
+
 ### Incident status
 
 `client.v2.incidents.all()` returns only **open** incidents. `status` carries the
