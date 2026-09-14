@@ -1,3 +1,11 @@
+## 1.7.0 (2026-09-14)
+
+### Feat
+
+- change maintenance end time on Custom subjects
+- subject maintenance window client
+- acknowledge Website and Custom incidents on separate clients
+
 ## 1.6.0 (2026-09-08)
 
 ### Feat
