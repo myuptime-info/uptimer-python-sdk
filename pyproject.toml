@@ -1,5 +1,9 @@
 [build-system]
-requires = ["hatchling"]
+# Pinned below 1.28: from that version hatchling writes Metadata-Version 2.5,
+# which twine 6.x (packaging 25) refuses to validate, so `twine check` fails on
+# an artifact that is otherwise fine. 2.4 is what the release path can verify.
+# Lift the pin once twine and packaging accept 2.5.
+requires = ["hatchling<1.28"]
 build-backend = "hatchling.build"
 
 [project]
