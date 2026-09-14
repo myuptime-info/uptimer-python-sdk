@@ -38,7 +38,9 @@ class WebsiteIncidentEndpoint(BaseEndpoint):
         open website incidents with the monitor each belongs to.
 
         It says a person looked; it changes nothing the engine decided — the
-        verdict, the evidence, the close hold and alerting all carry on. There
+        verdict, the evidence and the close hold all carry on. Its one effect on
+        alerting is that the four-hour reminders for this incident stop (uptimer
+        1.7.0); nothing else is silenced, and the recovery still arrives. There
         is no body and no actor argument: the person recorded is the owner of
         the API key, at the time of the call.
 

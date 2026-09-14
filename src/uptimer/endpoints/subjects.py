@@ -151,8 +151,10 @@ class SubjectIncidentEndpoint(BaseEndpoint):
         Record that you have seen THIS incident. Requires uptimer 1.7.0+.
 
         It says a person looked; it changes nothing the engine decided. The
-        verdict, the evidence and the close hold carry on, and alerting is
-        untouched — acknowledging does not silence anything.
+        verdict, the evidence and the close hold carry on. Its one effect on
+        alerting is that the four-hour reminders for this incident stop
+        (uptimer 1.7.0); nothing else is silenced, and the recovery still
+        arrives.
 
         There is no body and no actor argument: the person recorded is the owner
         of the API key, and the time is the time of the call. The server refuses
