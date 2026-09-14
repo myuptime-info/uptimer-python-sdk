@@ -30,6 +30,10 @@ include = ["LICENSE", "NOTICE", "README.md"]
 [tool.commitizen]
 name = "cz_conventional_commits"
 tag_format = "$version"
+# Create ANNOTATED tags: `git push --follow-tags` in `task release` SKIPS
+# lightweight ones, so the 1.7.0 bump commit went up without its tag and the
+# tag had to be pushed by hand afterwards.
+annotated_tag = true
 version_scheme = "semver2"
 version_provider = "uv"
 update_changelog_on_bump = true
