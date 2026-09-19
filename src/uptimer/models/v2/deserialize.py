@@ -19,7 +19,18 @@ from .monitor import (
     WebsiteMonitorResponse,
     WebsiteMonitorResponseBody,
 )
+from .notifications import (
+    DeliveryRecord,
+    DeliverySelection,
+    Destination,
+    PreviewResult,
+    SubjectAlertDelivery,
+    Transformation,
+    TransformationPreview,
+)
 from .observation import Observation
+from .rule import SubjectRule, rule_document_from_api
+from .signal import Signal
 from .subject import Subject
 from .workspace import Workspace
 
@@ -38,6 +49,13 @@ DeserializableType = Union[
     Subject,
     SubjectIncident,
     Workspace,
+    Signal,
+    SubjectRule,
+    Destination,
+    Transformation,
+    TransformationPreview,
+    SubjectAlertDelivery,
+    DeliveryRecord,
 ]
 
 DeserializableItem = Union[dict[str, Any], list[Any], Any]
@@ -57,6 +75,14 @@ _KIND_REGISTRY = {
     "observation": Observation,
     "subject": Subject,
     "workspace": Workspace,
+    "signal": Signal,
+    "subject_rule": SubjectRule,
+    # 1.8.0 notifications.
+    "notification_destination": Destination,
+    "notification_transformation": Transformation,
+    "notification_transformation_preview": TransformationPreview,
+    "subject_alert_delivery": SubjectAlertDelivery,
+    "notification_delivery": DeliveryRecord,
 }
 
 
@@ -89,6 +115,30 @@ def _build(cls: type, data: dict[str, Any]) -> Any:  # noqa: ANN401
                 unknown=value.get("unknown", []),
                 ok=value.get("ok", []),
             )
+        elif key == "document" and cls is SubjectRule:
+            # A rule's policy: structure, but no kind — and `from` has to become
+            # `from_rule` on the way in, because `from` is a Python keyword.
+            kwargs[key] = rule_document_from_api(value)
+        elif key == "selections" and cls is SubjectAlertDelivery:
+            kwargs[key] = [
+                DeliverySelection(
+                    destination_id=row.get("destination_id", 0),
+                    alert_kinds=row.get("alert_kinds") or [],
+                    destination_name=row.get("destination_name", ""),
+                )
+                for row in value or []
+            ]
+        elif key == "results" and cls is TransformationPreview:
+            kwargs[key] = [
+                PreviewResult(
+                    alert_kind=row.get("alert_kind", ""),
+                    label=row.get("label", ""),
+                    ok=row.get("ok", False),
+                    output=row.get("output", ""),
+                    error=row.get("error", ""),
+                )
+                for row in value or []
+            ]
         else:
             kwargs[key] = value
     try:
@@ -174,5 +224,68 @@ def from_api_subject(data: dict[str, Any]) -> Subject:
     obj = from_api(data)
     if not isinstance(obj, Subject):
         expected = "Subject"
+        raise TypeMismatchError(expected, type(obj).__name__)
+    return obj
+
+
+def from_api_signal(data: dict[str, Any]) -> Signal:
+    """Deserialize one signal of a custom subject."""
+    obj = from_api(data)
+    if not isinstance(obj, Signal):
+        expected = "Signal"
+        raise TypeMismatchError(expected, type(obj).__name__)
+    return obj
+
+
+def from_api_subject_rule(data: dict[str, Any]) -> SubjectRule:
+    """Deserialize one operator-authored rule, with its policy."""
+    obj = from_api(data)
+    if not isinstance(obj, SubjectRule):
+        expected = "SubjectRule"
+        raise TypeMismatchError(expected, type(obj).__name__)
+    return obj
+
+
+def from_api_destination(data: dict[str, Any]) -> Destination:
+    """Deserialize one alert destination."""
+    obj = from_api(data)
+    if not isinstance(obj, Destination):
+        expected = "Destination"
+        raise TypeMismatchError(expected, type(obj).__name__)
+    return obj
+
+
+def from_api_transformation(data: dict[str, Any]) -> Transformation:
+    """Deserialize one outbound payload template."""
+    obj = from_api(data)
+    if not isinstance(obj, Transformation):
+        expected = "Transformation"
+        raise TypeMismatchError(expected, type(obj).__name__)
+    return obj
+
+
+def from_api_transformation_preview(data: dict[str, Any]) -> TransformationPreview:
+    """Deserialize a template rendered against every sample."""
+    obj = from_api(data)
+    if not isinstance(obj, TransformationPreview):
+        expected = "TransformationPreview"
+        raise TypeMismatchError(expected, type(obj).__name__)
+    return obj
+
+
+def from_api_subject_delivery(data: dict[str, Any]) -> SubjectAlertDelivery:
+    """Deserialize one subject's alert delivery table."""
+    obj = from_api(data)
+    if not isinstance(obj, SubjectAlertDelivery):
+        expected = "SubjectAlertDelivery"
+        raise TypeMismatchError(expected, type(obj).__name__)
+    return obj
+
+
+def from_api_delivery_record(data: dict[str, Any]) -> DeliveryRecord:
+    """Deserialize one recorded delivery attempt."""
+    obj = from_api(data)
+    if not isinstance(obj, DeliveryRecord):
+        expected = "DeliveryRecord"
         raise TypeMismatchError(expected, type(obj).__name__)
     return obj

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import TYPE_CHECKING
 
+from uptimer.endpoints.delivery import AlertDeliveryEndpoint
 from uptimer.endpoints.endpoint import BaseEndpoint
 from uptimer.models.v2 import DeleteWebsiteMonitorResponse, from_api_website_monitor
 
@@ -45,12 +46,41 @@ def _payload(data: object) -> dict:
     return _strip_kinds(body)  # type: ignore[return-value]
 
 
+class WebsiteEndpoint(BaseEndpoint):
+    """
+    One website monitor, addressed by its id.
+
+    This is how you reach what hangs off a monitor rather than the monitor
+    itself: today that is its alert delivery table, which a website monitor
+    carries on its own collection because `/v2/subjects` serves Custom subjects
+    only.
+    """
+
+    delivery: AlertDeliveryEndpoint
+
+    def __init__(
+        self,
+        http: UptimerHttpLib,
+        monitor_id: str,
+        parent_segments: str | list[str] | None = None,
+    ):
+        super().__init__(http, monitor_id, parent_segments)
+        self.delivery = AlertDeliveryEndpoint(
+            http,
+            [*self._parent_segments, self.segment],
+        )
+
+
 class WebsitesEndpoint(BaseEndpoint):
     """
     Website monitoring: the built-in template that watches a URL.
 
     Nested under /v2/monitoring because it is one template among the several
     coming later, not the general monitor model.
+
+    Call it with an id to reach what is under one monitor —
+    `client.v2.monitoring.websites("<id>").delivery` — or call the methods here
+    to list, read and change the monitors themselves.
     """
 
     def __init__(
@@ -59,6 +89,16 @@ class WebsitesEndpoint(BaseEndpoint):
         parent_segments: str | list[str] | None = None,
     ):
         super().__init__(http, "websites", parent_segments)
+
+    def __call__(self, monitor_id: str) -> WebsiteEndpoint:
+        if not monitor_id or not monitor_id.strip():
+            message = "monitor id is required"
+            raise ValueError(message)
+        return WebsiteEndpoint(
+            self.http,
+            monitor_id,
+            [*self._parent_segments, self.segment],
+        )
 
     def all(self, workspace_id: str) -> list[WebsiteMonitor]:
         """Every website monitor in a workspace."""

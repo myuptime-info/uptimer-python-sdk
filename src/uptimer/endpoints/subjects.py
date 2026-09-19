@@ -4,25 +4,37 @@ from dataclasses import asdict
 from typing import TYPE_CHECKING
 from urllib.parse import quote
 
+from uptimer.endpoints.delivery import AlertDeliveryEndpoint
 from uptimer.endpoints.endpoint import BaseEndpoint
 from uptimer.models.v2 import (
+    DeleteRuleResponse,
+    DeleteSignalResponse,
     from_api_acknowledgement,
     from_api_maintenance,
     from_api_observation,
+    from_api_signal,
     from_api_subject,
     from_api_subject_incident,
+    from_api_subject_rule,
+    rule_document_to_api,
 )
 
 if TYPE_CHECKING:
     from uptimer.http import UptimerHttpLib
     from uptimer.models.v2 import (
         CreateObservationRequest,
+        CreateRuleRequest,
+        CreateSignalRequest,
         CreateSubjectRequest,
         IncidentAcknowledgement,
         MaintenanceWindow,
         Observation,
+        Signal,
         Subject,
         SubjectIncident,
+        SubjectRule,
+        UpdateRuleRequest,
+        UpdateSignalRequest,
     )
 
 
@@ -110,12 +122,13 @@ class SignalsEndpoint(BaseEndpoint):
     """
     The signals of one custom subject.
 
-    Call it with a slug to reach one:
-    `client.v2.subjects("nightly-export").signals("worker-pulse")`.
+    Two ways in, as with subjects themselves: call it with a slug to reach what
+    is under one —
+    `client.v2.subjects("nightly-export").signals("worker-pulse").observations` —
+    or call the methods here to list, read, author, rename or delete.
 
-    This is the path to a signal that already exists, so observations can be
-    reported to it. Signals are created and edited in the Uptimer UI, on the
-    subject's own page.
+    Every route refuses a website subject: the signal a website monitor keeps is
+    the check form's, and this is the custom half of the API.
     """
 
     def __init__(
@@ -130,6 +143,150 @@ class SignalsEndpoint(BaseEndpoint):
 
     def _parent_segments_with_self(self) -> list[str]:
         return [*self._parent_segments, self.segment]
+
+    def all(self) -> list[Signal]:
+        """Every signal of this subject. A subject you just created has none."""
+        response = self.http.client.get(self.url)
+        result = self.http.parse_response(response=response)
+        return [from_api_signal(item) for item in result]
+
+    def get(self, signal_slug: str) -> Signal:
+        """One signal by its slug."""
+        response = self.http.client.get(f"{self.url}/{_slug(signal_slug, 'signal')}")
+        result = self.http.parse_response(response=response)
+        return from_api_signal(result)
+
+    def create(self, signal: CreateSignalRequest) -> Signal:
+        """
+        Add one custom signal, and return it as the server stored it.
+
+        The name produces the SLUG a sender will post to, and the kind is fixed
+        once created: choosing between heartbeat and event is choosing what this
+        signal's silence means, and changing that under a sender is not a
+        rename.
+
+        Raises DefaultUptimerApiError on a name with no letter or digit, a name
+        already used on this subject, a kind that is not custom heartbeat or
+        event, and a `meta` that is not an object.
+        """
+        response = self.http.client.post(self.url, json=asdict(signal))
+        result = self.http.parse_response(response=response)
+        return from_api_signal(result)
+
+    def update(self, signal_slug: str, signal: UpdateSignalRequest) -> Signal:
+        """
+        Rename one and REPLACE its meta.
+
+        The kind and the slug are immutable — senders are already posting to
+        that address — so a rename never moves it. The signal a website monitor
+        maintains refuses this: its configuration is the check form's.
+        """
+        response = self.http.client.post(
+            f"{self.url}/{_slug(signal_slug, 'signal')}",
+            json=asdict(signal),
+        )
+        result = self.http.parse_response(response=response)
+        return from_api_signal(result)
+
+    def delete(self, signal_slug: str) -> DeleteSignalResponse:
+        """
+        Delete one signal AND its observations.
+
+        A signal a rule reads is refused: retarget or remove those rules first.
+        Uptimer never unlinks a rule on its own, because that would quietly
+        change what the rule watches in order to complete an unrelated delete.
+        """
+        response = self.http.client.delete(f"{self.url}/{_slug(signal_slug, 'signal')}")
+        result = self.http.parse_response(response=response)
+        return DeleteSignalResponse(
+            message=result["message"],
+            signal_id=result["signal_id"],
+            subject_id=result["subject_id"],
+        )
+
+
+class RulesEndpoint(BaseEndpoint):
+    """
+    The incident rules of one custom subject.
+
+    A rule reads the subject's signals — or another of its rules — and decides
+    whether there is a problem. The policy is a document: what it reads, what
+    they have to agree on, and how long a state must hold.
+
+    Authoring one needs the signals to exist first: every input cites a signal
+    or a rule OF THIS SUBJECT, because a subject is the boundary.
+    """
+
+    def __init__(
+        self,
+        http: UptimerHttpLib,
+        parent_segments: str | list[str] | None = None,
+    ):
+        super().__init__(http, "rules", parent_segments)
+
+    def all(self) -> list[SubjectRule]:
+        """Every rule of this subject, each with its policy document."""
+        response = self.http.client.get(self.url)
+        result = self.http.parse_response(response=response)
+        return [from_api_subject_rule(item) for item in result]
+
+    def get(self, rule_slug: str) -> SubjectRule:
+        """One rule by its slug."""
+        response = self.http.client.get(f"{self.url}/{_slug(rule_slug, 'rule')}")
+        result = self.http.parse_response(response=response)
+        return from_api_subject_rule(result)
+
+    def create(self, rule: CreateRuleRequest) -> SubjectRule:
+        """
+        Add one rule, returned at `policy_version` 1.
+
+        Every input must cite a signal or a rule of this subject.
+
+        Raises DefaultUptimerApiError when the name has no letter or digit or is
+        already used on this subject, when an input cites a signal or rule this
+        subject does not have, when an input sets neither or both of `mode`
+        readings, and when the document is otherwise not a valid policy.
+        """
+        body = {"name": rule.name, "document": rule_document_to_api(rule.document)}
+        response = self.http.client.post(self.url, json=body)
+        result = self.http.parse_response(response=response)
+        return from_api_subject_rule(result)
+
+    def update(self, rule_slug: str, rule: UpdateRuleRequest) -> SubjectRule:
+        """
+        Replace a rule's name and its whole policy.
+
+        The document is a REPLACEMENT, not a patch: send the policy you want. A
+        successful save increments `policy_version`, and the rule keeps its
+        identity and its slug, so the incidents and the timeline already
+        pointing at it stay attached.
+
+        A rule website monitoring created refuses this: its policy is the check
+        form's, and a save here would be rewritten on the next check save.
+        """
+        body = {"name": rule.name, "document": rule_document_to_api(rule.document)}
+        response = self.http.client.post(
+            f"{self.url}/{_slug(rule_slug, 'rule')}",
+            json=body,
+        )
+        result = self.http.parse_response(response=response)
+        return from_api_subject_rule(result)
+
+    def delete(self, rule_slug: str) -> DeleteRuleResponse:
+        """
+        Delete one rule.
+
+        A rule another rule reads with `from` is refused, for the same reason a
+        signal in use is: the delete would quietly change what the other rule
+        watches.
+        """
+        response = self.http.client.delete(f"{self.url}/{_slug(rule_slug, 'rule')}")
+        result = self.http.parse_response(response=response)
+        return DeleteRuleResponse(
+            message=result["message"],
+            rule_id=result["rule_id"],
+            subject_id=result["subject_id"],
+        )
 
 
 class SubjectIncidentEndpoint(BaseEndpoint):
@@ -322,8 +479,10 @@ class SubjectEndpoint(BaseEndpoint):
     """One monitored subject, addressed by its slug."""
 
     signals: SignalsEndpoint
+    rules: RulesEndpoint
     incidents: SubjectIncidentsEndpoint
     maintenance: MaintenanceEndpoint
+    delivery: AlertDeliveryEndpoint
 
     def __init__(
         self,
@@ -333,17 +492,12 @@ class SubjectEndpoint(BaseEndpoint):
         workspace_id: str | None = None,
     ):
         super().__init__(http, _slug(subject_slug, "subject"), parent_segments)
-        self.signals = SignalsEndpoint(http, [*self._parent_segments, self.segment])
-        self.incidents = SubjectIncidentsEndpoint(
-            http,
-            [*self._parent_segments, self.segment],
-            workspace_id,
-        )
-        self.maintenance = MaintenanceEndpoint(
-            http,
-            [*self._parent_segments, self.segment],
-            workspace_id,
-        )
+        mine = [*self._parent_segments, self.segment]
+        self.signals = SignalsEndpoint(http, mine)
+        self.rules = RulesEndpoint(http, mine)
+        self.incidents = SubjectIncidentsEndpoint(http, mine, workspace_id)
+        self.maintenance = MaintenanceEndpoint(http, mine, workspace_id)
+        self.delivery = AlertDeliveryEndpoint(http, mine, workspace_id)
 
 
 class SubjectsEndpoint(BaseEndpoint):
@@ -356,8 +510,8 @@ class SubjectsEndpoint(BaseEndpoint):
 
     Two ways in, because there are two things to do with a subject:
 
-    - call it with a slug to reach what is under one —
-      `client.v2.subjects("nightly-export").signals("worker-pulse").observations`;
+    - call it with a slug to reach what is under one — its signals, its rules,
+      its incidents, its maintenance and its alert delivery;
     - call the methods here to list, fetch, or create one.
 
     There is no update or delete. Deleting a subject takes its whole history

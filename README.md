@@ -25,6 +25,17 @@ or
 uv add uptimer-python-sdk
 ```
 
+**This package targets Uptimer 1.8.0 and later.** The SDK's major.minor tracks
+the server release it speaks to, so install the one that matches yours; patch
+numbers move independently. `client.ensure_compatible()` checks it for you and
+fails with a message that names the fix.
+
+Still on API v1? Pin `uptimer-python-sdk<1`. The server's v1 is unchanged and
+supported, so 0.4.x keeps working — it just cannot use anything newer.
+
+The complete REST API reference is at
+[uptimer.myuptime.info](https://uptimer.myuptime.info/latest/reference/rest-api/).
+
 ## Usage
 
 ### Create client
@@ -192,11 +203,96 @@ locations, so it has its own call — `client.v2.monitoring.websites.create` —
 and asking for `subject_kind="website"` on this route is refused with a message
 saying so.
 
-**Signals and rules are configured in the Uptimer UI**, on the subject's own
-page. This SDK reports observations to a signal that already exists — see
-[Reporting your own observations](#reporting-your-own-observations). The REST
-routes behind those screens are documented in the
-[Uptimer REST API reference](https://uptimer.myuptime.info/latest/reference/rest-api/).
+### Signals: what reports to a subject
+
+A **signal** is one thing that reports. A **heartbeat** is expected to keep
+reporting, so its silence is itself a symptom; an **event** reports only when
+there is something to say, so its silence means nothing. The kind is fixed when
+the signal is created — senders are already posting to it, and changing what
+their silence means underneath them is not a rename.
+
+```python
+from uptimer.models.v2 import (
+    SIGNAL_KIND_HEARTBEAT,
+    CreateSignalRequest,
+    UpdateSignalRequest,
+)
+
+signals = client.v2.subjects("nightly-export", "your-workspace-id").signals
+
+signal = signals.create(
+    CreateSignalRequest(
+        name="Worker pulse",
+        kind=SIGNAL_KIND_HEARTBEAT,
+        meta={"team": "payments"},          # stored and returned untouched
+    ),
+)
+
+# `id` is the slug a sender posts to. A rename never moves it.
+signals.update(signal.id, UpdateSignalRequest(name="Worker heartbeat", meta={}))
+
+for existing in signals.all():
+    print(existing.id, existing.signal_kind)
+
+# Deleting a signal deletes its observations. One a rule reads is refused:
+# retarget or remove those rules first.
+signals.delete(signal.id)
+```
+
+### Rules: what counts as a problem
+
+A **rule** reads a subject's signals — or another of its rules — and decides
+whether there is a problem. The policy is a document: what it reads, what those
+inputs have to agree on, and how long a state must hold.
+
+```python
+from uptimer.models.v2 import (
+    INPUT_MODE_LATEST_VALUE,
+    INPUT_MODE_STATUS,
+    NEED_ANY,
+    CreateRuleRequest,
+    RuleDecision,
+    RuleDocument,
+    RuleInput,
+    RuleWait,
+    UpdateRuleRequest,
+)
+
+rules = client.v2.subjects("nightly-export", "your-workspace-id").rules
+
+rule = rules.create(
+    CreateRuleRequest(
+        name="Export health",
+        document=RuleDocument(
+            inputs=[
+                # The heartbeat stopped, or its last observation said "problem".
+                RuleInput(signal="worker-pulse", mode=INPUT_MODE_STATUS,
+                          no_data_after="5m"),
+                # A number out of range.
+                RuleInput(signal="queue-depth", mode=INPUT_MODE_LATEST_VALUE,
+                          compare=">", threshold=1000),
+                # Another rule's verdict. `from` is a Python keyword, so it is
+                # `from_rule` here and `from` on the wire.
+                RuleInput(from_rule="queue-health"),
+            ],
+            decision=RuleDecision(need=NEED_ANY),
+            wait=RuleWait(confirm_after="2m", close_after="2m"),
+        ),
+    ),
+)
+
+# The policy is a REPLACEMENT, not a patch: read it, change it, send the whole
+# thing back. A successful save increments policy_version, and the rule keeps
+# its slug — the incidents already pointing at it stay attached.
+rule.document.wait.confirm_after = "5m"
+rules.update(rule.id, UpdateRuleRequest(name=rule.name, document=rule.document))
+
+rules.delete(rule.id)
+```
+
+Durations are strings — `"5m"`, `"2m0s"` — so a stored policy reads the way you
+would write it. Every input must cite a signal or a rule **of this subject**: a
+subject is the boundary, so add the signals first.
 
 ### Reporting your own observations
 
@@ -267,8 +363,8 @@ under its subject on v2. Neither method falls back to the other, and there is no
 kind-agnostic one: acknowledging is a claim about a specific incident, and an
 SDK that guessed which family it belonged to could claim the wrong one.
 
-**Availability.** These methods need a matching **Uptimer 1.7.0+** server — the
-routes do not exist before that.
+**Availability.** These methods need an **Uptimer 1.7.0+** server — the routes
+do not exist before that.
 
 **Custom monitoring** — list the subject's open incidents, pick one, acknowledge
 it by id:
@@ -384,6 +480,201 @@ out — and `muted` says what waits, in the server's own words.
 
 A past end time, a window already running, a website subject, or a caller who is
 not an editor raise `DefaultUptimerApiError`. Reading takes the viewer role.
+
+### Alert destinations
+
+A **destination** is one place a workspace's alerts can go: a Slack incoming
+webhook, or any HTTP endpoint that accepts a POST. A workspace has as many as it
+needs, and each subject chooses which of them it tells.
+
+Reading a destination takes the **editor** role, not just membership: a
+destination holds a webhook URL, and a URL is enough for anyone holding it to
+post into your channel.
+
+```python
+from uptimer.models.v2 import (
+    DESTINATION_TYPE_SLACK,
+    DESTINATION_TYPE_WEBHOOK,
+    CreateDestinationRequest,
+    UpdateDestinationRequest,
+)
+
+destinations = client.v2.notifications.destinations
+
+# The FIRST destination in a workspace becomes its default, asked for or not:
+# a workspace whose only destination is not the default notifies nobody.
+slack = destinations.create(
+    CreateDestinationRequest(
+        name="Acme · #incidents",
+        url="https://hooks.slack.com/services/T00/B00/xxxx",
+        destination_type=DESTINATION_TYPE_SLACK,
+        channel="#incidents",          # stored without the '#'
+    ),
+    workspace_id="your-workspace-id",
+)
+
+relay = destinations.create(
+    CreateDestinationRequest(
+        name="Pager relay",
+        url="https://hooks.example.com/uptimer",
+        destination_type=DESTINATION_TYPE_WEBHOOK,
+    ),
+    workspace_id="your-workspace-id",
+)
+
+# Move the address, or attach a payload template (see below). The TYPE is fixed
+# at creation: delete and recreate to change it.
+destinations.update(
+    relay.id,
+    UpdateDestinationRequest(name=relay.name, url="https://hooks.example.com/v2"),
+    workspace_id="your-workspace-id",
+)
+
+destinations.set_enabled(relay.id, enabled=False, workspace_id="your-workspace-id")
+destinations.make_default(slack.id, workspace_id="your-workspace-id")
+
+# A REAL send: same render, same transport, same delivery record as an alert.
+# A destination that refuses it raises, with the far end's own words.
+destinations.send_test(slack.id, workspace_id="your-workspace-id")
+
+# Deleting the default promotes nobody — check what you did.
+answer = destinations.delete(relay.id, workspace_id="your-workspace-id")
+assert answer.was_default is False
+```
+
+`workspace_id` is optional everywhere here. It settles an ambiguity rather than
+being required: these resources have no slug of their own, so the server
+searches your memberships when it is absent and says so if the answer is more
+than one.
+
+### Transformations: the shape a destination receives
+
+A **transformation** is a named template for the body a destination gets — a
+PagerDuty event, your own JSON, a line of text. A destination with none gets
+Uptimer's built-in Slack-shaped message, which is what `transformation_id=None`
+means.
+
+```python
+from uptimer.models.v2 import (
+    CreateTransformationRequest,
+    UpdateDestinationRequest,
+)
+
+transformations = client.v2.notifications.transformations
+
+# The vocabulary: three sample messages, each with every field a template may
+# read. No workspace — these are the product's own fixtures.
+for sample in transformations.samples():
+    print(sample.label, sorted(sample.fields))
+
+# Ask before you write. `passed` is exactly the condition a save enforces.
+preview = transformations.preview(
+    '{"event": "{{ kind }}", "summary": "{{ summary }}"}',
+    workspace_id="your-workspace-id",
+)
+assert preview.passed
+for result in preview.results:
+    print(result.label, result.ok, result.output or result.error)
+
+template = transformations.create(
+    CreateTransformationRequest(
+        name="PagerDuty compact",
+        template='{"event": "{{ kind }}", "summary": "{{ summary }}"}',
+    ),
+    workspace_id="your-workspace-id",
+)
+assert template.content_type == "application/json"
+
+# Attach it. Passing transformation_id=None puts the destination back on
+# Uptimer's own message.
+client.v2.notifications.destinations.update(
+    slack.id,
+    UpdateDestinationRequest(
+        name=slack.name,
+        url=slack.url,
+        channel=slack.channel,
+        transformation_id=template.id,
+    ),
+    workspace_id="your-workspace-id",
+)
+```
+
+**A template is stored only once it renders all three messages.** There is no
+force flag: a template that breaks on one of them raises, naming the sample that
+broke, and a refused edit leaves the stored template exactly as it was. A
+template starting with `{` or `[` is treated as JSON — values are escaped as
+they are substituted and the result has to parse, so a quoted error cannot break
+the document.
+
+### Alert delivery: which destinations a subject tells
+
+The choice lives on the **subject**, not on the workspace: the marketing site
+telling nobody must not stop the payments API paging the on-call.
+
+```python
+from uptimer.models.v2 import (
+    ALERT_KIND_NO_DATA,
+    ALERT_KIND_PROBLEM,
+    ALERT_KIND_RECOVERY,
+    DeliverySelection,
+)
+
+delivery = client.v2.subjects("nightly-export", "your-workspace-id").delivery
+
+table = delivery.get()
+if table.uses_workspace_default:
+    print("this subject falls back to", table.default_destination_id)
+elif table.is_silent:
+    print("nothing is sent for this subject")
+
+# The body is the WHOLE table: what you send is what the subject will have.
+delivery.replace(
+    [
+        DeliverySelection(
+            destination_id=slack.id,
+            alert_kinds=[ALERT_KIND_PROBLEM, ALERT_KIND_NO_DATA, ALERT_KIND_RECOVERY],
+        ),
+        DeliverySelection(destination_id=relay.id, alert_kinds=[ALERT_KIND_PROBLEM]),
+    ],
+)
+
+# Back to the workspace default — or to silence, if there is no default.
+delivery.clear()
+```
+
+A reminder about an unanswered problem rides with `problem`: a destination that
+hears about problems hears the four-hourly reminders too, which is why there is
+no fourth alert kind.
+
+A **website monitor** carries the same table on its own collection, because
+`/v2/subjects` serves Custom subjects only:
+
+```python
+client.v2.monitoring.websites("monitor-id").delivery.get()
+```
+
+Saving a table changes delivery **only**. Signals, rules, incidents,
+acknowledgement and maintenance are untouched, and nothing is sent by saving.
+
+### Delivery log: what was actually sent
+
+```python
+records = client.v2.notifications.deliveries.all(
+    workspace_id="your-workspace-id",
+    destination_id=slack.id,        # optional: one destination
+    undelivered=True,               # optional: only what did not arrive
+)
+
+for record in records:
+    print(record.at, record.destination_name, record.status)
+    if not record.delivered:
+        print("  refused:", record.error)
+```
+
+It is a read — nothing here sends or resends, and there is no retry. Each record
+keeps the destination's **name and type as they were at the attempt**, so a
+rename or a delete later leaves the row still saying where the message went; the
+webhook URL is never recorded. Records are kept **30 days**.
 
 ### Incident status
 
