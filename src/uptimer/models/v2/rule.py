@@ -101,9 +101,11 @@ class UpdateRuleRequest:
     A rule's name and its whole policy.
 
     The document is a **replacement**, not a patch: send the policy you want,
-    not the part you are changing. A successful save increments
-    `policy_version`, and the rule keeps its identity and its slug, so the
-    incidents and the timeline already pointing at it stay attached.
+    not the part you are changing. A CHANGED policy increments
+    `policy_version`; sending the same document back leaves it where it was,
+    because the timeline records which version produced an entry and a no-op
+    must not churn it. Either way the rule keeps its identity and its slug, so
+    the incidents and the timeline already pointing at it stay attached.
     """
 
     name: str

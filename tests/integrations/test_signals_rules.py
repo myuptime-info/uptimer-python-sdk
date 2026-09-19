@@ -103,14 +103,27 @@ def test_authoring_a_signal_and_a_rule(uptimer_url: str):
     assert rule.policy_version == 1
     assert rule.document.inputs[0].signal == signal.id
 
-    # A policy read back and sent straight on is the same policy, and saving it
-    # counts as a new version.
-    updated = rules.update(
+    # A policy read back and sent straight on is the SAME policy, and the
+    # version does not move: the timeline records which version produced an
+    # entry, so a no-op save must not churn it.
+    unchanged = rules.update(
         rule.id,
         UpdateRuleRequest(name=rule.name, document=rule.document),
     )
-    assert updated.policy_version == rule.policy_version + 1
-    assert updated.document.inputs[0].mode == INPUT_MODE_STATUS
+    assert unchanged.policy_version == rule.policy_version
+    assert unchanged.document.inputs[0].mode == INPUT_MODE_STATUS
+
+    # A real edit moves it. Read-modify-write is the whole point of the round
+    # trip above: change one field of the document you were given, send it all
+    # back, and the rule keeps its identity and its slug.
+    unchanged.document.wait.confirm_after = "5m"
+    edited = rules.update(
+        rule.id,
+        UpdateRuleRequest(name=rule.name, document=unchanged.document),
+    )
+    assert edited.policy_version == rule.policy_version + 1
+    assert edited.document.wait.confirm_after.startswith("5m")
+    assert edited.id == rule.id
 
     # A signal a rule reads cannot be deleted: Uptimer never silently unlinks a
     # rule to complete an unrelated delete.

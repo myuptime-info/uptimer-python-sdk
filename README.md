@@ -282,8 +282,9 @@ rule = rules.create(
 )
 
 # The policy is a REPLACEMENT, not a patch: read it, change it, send the whole
-# thing back. A successful save increments policy_version, and the rule keeps
-# its slug — the incidents already pointing at it stay attached.
+# thing back. A CHANGED policy increments policy_version; sending the same
+# document back leaves it where it was. Either way the rule keeps its slug, so
+# the incidents already pointing at it stay attached.
 rule.document.wait.confirm_after = "5m"
 rules.update(rule.id, UpdateRuleRequest(name=rule.name, document=rule.document))
 

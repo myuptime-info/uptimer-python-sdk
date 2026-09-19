@@ -256,10 +256,12 @@ class RulesEndpoint(BaseEndpoint):
         """
         Replace a rule's name and its whole policy.
 
-        The document is a REPLACEMENT, not a patch: send the policy you want. A
-        successful save increments `policy_version`, and the rule keeps its
-        identity and its slug, so the incidents and the timeline already
-        pointing at it stay attached.
+        The document is a REPLACEMENT, not a patch: send the policy you want.
+        A CHANGED policy increments `policy_version`; sending the same document
+        back leaves it where it was, because the timeline records which version
+        produced an entry and a no-op must not churn it. Either way the rule
+        keeps its identity and its slug, so the incidents and the timeline
+        already pointing at it stay attached.
 
         A rule website monitoring created refuses this: its policy is the check
         form's, and a save here would be rewritten on the next check save.
