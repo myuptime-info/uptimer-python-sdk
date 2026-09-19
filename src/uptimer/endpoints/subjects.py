@@ -52,6 +52,18 @@ def _slug(value: str, what: str) -> str:
     return quote(value, safe="")
 
 
+def _scope(workspace_id: str | None) -> dict | None:
+    """
+    Build the workspace query these routes take, or nothing.
+
+    A subject slug is unique within a workspace, not across them, and the server
+    resolves the subject BEFORE it does anything else — so a caller who named a
+    workspace must have it carried into every nested route, or the same slug in
+    two of their workspaces answers `Ambiguous subject`.
+    """
+    return {"workspace_id": workspace_id} if workspace_id else None
+
+
 def _payload(observation: CreateObservationRequest) -> dict:
     """
     Serialize an observation, omitting what was not set.
@@ -79,8 +91,10 @@ class ObservationsEndpoint(BaseEndpoint):
         self,
         http: UptimerHttpLib,
         parent_segments: str | list[str] | None = None,
+        workspace_id: str | None = None,
     ):
         super().__init__(http, "observations", parent_segments)
+        self._workspace_id = workspace_id
 
     def create(self, observation: CreateObservationRequest) -> Observation:
         """
@@ -95,7 +109,11 @@ class ObservationsEndpoint(BaseEndpoint):
         raised only when nothing was stored — a bad status, an unparsable
         timestamp, a signal that does not exist, or no permission.
         """
-        response = self.http.client.post(self.url, json=_payload(observation))
+        response = self.http.client.post(
+            self.url,
+            params=_scope(self._workspace_id),
+            json=_payload(observation),
+        )
         result = self.http.parse_response(response=response)
         return from_api_observation(result)
 
@@ -110,11 +128,13 @@ class SignalEndpoint(BaseEndpoint):
         http: UptimerHttpLib,
         signal_slug: str,
         parent_segments: str | list[str] | None = None,
+        workspace_id: str | None = None,
     ):
         super().__init__(http, _slug(signal_slug, "signal"), parent_segments)
         self.observations = ObservationsEndpoint(
             http,
             [*self._parent_segments, self.segment],
+            workspace_id,
         )
 
 
@@ -135,24 +155,34 @@ class SignalsEndpoint(BaseEndpoint):
         self,
         http: UptimerHttpLib,
         parent_segments: str | list[str] | None = None,
+        workspace_id: str | None = None,
     ):
         super().__init__(http, "signals", parent_segments)
+        self._workspace_id = workspace_id
 
     def __call__(self, signal_slug: str) -> SignalEndpoint:
-        return SignalEndpoint(self.http, signal_slug, self._parent_segments_with_self())
+        return SignalEndpoint(
+            self.http,
+            signal_slug,
+            self._parent_segments_with_self(),
+            self._workspace_id,
+        )
 
     def _parent_segments_with_self(self) -> list[str]:
         return [*self._parent_segments, self.segment]
 
     def all(self) -> list[Signal]:
         """Every signal of this subject. A subject you just created has none."""
-        response = self.http.client.get(self.url)
+        response = self.http.client.get(self.url, params=_scope(self._workspace_id))
         result = self.http.parse_response(response=response)
         return [from_api_signal(item) for item in result]
 
     def get(self, signal_slug: str) -> Signal:
         """One signal by its slug."""
-        response = self.http.client.get(f"{self.url}/{_slug(signal_slug, 'signal')}")
+        response = self.http.client.get(
+            f"{self.url}/{_slug(signal_slug, 'signal')}",
+            params=_scope(self._workspace_id),
+        )
         result = self.http.parse_response(response=response)
         return from_api_signal(result)
 
@@ -169,7 +199,11 @@ class SignalsEndpoint(BaseEndpoint):
         already used on this subject, a kind that is not custom heartbeat or
         event, and a `meta` that is not an object.
         """
-        response = self.http.client.post(self.url, json=asdict(signal))
+        response = self.http.client.post(
+            self.url,
+            params=_scope(self._workspace_id),
+            json=asdict(signal),
+        )
         result = self.http.parse_response(response=response)
         return from_api_signal(result)
 
@@ -183,6 +217,7 @@ class SignalsEndpoint(BaseEndpoint):
         """
         response = self.http.client.post(
             f"{self.url}/{_slug(signal_slug, 'signal')}",
+            params=_scope(self._workspace_id),
             json=asdict(signal),
         )
         result = self.http.parse_response(response=response)
@@ -196,7 +231,10 @@ class SignalsEndpoint(BaseEndpoint):
         Uptimer never unlinks a rule on its own, because that would quietly
         change what the rule watches in order to complete an unrelated delete.
         """
-        response = self.http.client.delete(f"{self.url}/{_slug(signal_slug, 'signal')}")
+        response = self.http.client.delete(
+            f"{self.url}/{_slug(signal_slug, 'signal')}",
+            params=_scope(self._workspace_id),
+        )
         result = self.http.parse_response(response=response)
         return DeleteSignalResponse(
             message=result["message"],
@@ -221,18 +259,23 @@ class RulesEndpoint(BaseEndpoint):
         self,
         http: UptimerHttpLib,
         parent_segments: str | list[str] | None = None,
+        workspace_id: str | None = None,
     ):
         super().__init__(http, "rules", parent_segments)
+        self._workspace_id = workspace_id
 
     def all(self) -> list[SubjectRule]:
         """Every rule of this subject, each with its policy document."""
-        response = self.http.client.get(self.url)
+        response = self.http.client.get(self.url, params=_scope(self._workspace_id))
         result = self.http.parse_response(response=response)
         return [from_api_subject_rule(item) for item in result]
 
     def get(self, rule_slug: str) -> SubjectRule:
         """One rule by its slug."""
-        response = self.http.client.get(f"{self.url}/{_slug(rule_slug, 'rule')}")
+        response = self.http.client.get(
+            f"{self.url}/{_slug(rule_slug, 'rule')}",
+            params=_scope(self._workspace_id),
+        )
         result = self.http.parse_response(response=response)
         return from_api_subject_rule(result)
 
@@ -248,7 +291,11 @@ class RulesEndpoint(BaseEndpoint):
         readings, and when the document is otherwise not a valid policy.
         """
         body = {"name": rule.name, "document": rule_document_to_api(rule.document)}
-        response = self.http.client.post(self.url, json=body)
+        response = self.http.client.post(
+            self.url,
+            params=_scope(self._workspace_id),
+            json=body,
+        )
         result = self.http.parse_response(response=response)
         return from_api_subject_rule(result)
 
@@ -269,6 +316,7 @@ class RulesEndpoint(BaseEndpoint):
         body = {"name": rule.name, "document": rule_document_to_api(rule.document)}
         response = self.http.client.post(
             f"{self.url}/{_slug(rule_slug, 'rule')}",
+            params=_scope(self._workspace_id),
             json=body,
         )
         result = self.http.parse_response(response=response)
@@ -282,7 +330,10 @@ class RulesEndpoint(BaseEndpoint):
         signal in use is: the delete would quietly change what the other rule
         watches.
         """
-        response = self.http.client.delete(f"{self.url}/{_slug(rule_slug, 'rule')}")
+        response = self.http.client.delete(
+            f"{self.url}/{_slug(rule_slug, 'rule')}",
+            params=_scope(self._workspace_id),
+        )
         result = self.http.parse_response(response=response)
         return DeleteRuleResponse(
             message=result["message"],
@@ -495,8 +546,8 @@ class SubjectEndpoint(BaseEndpoint):
     ):
         super().__init__(http, _slug(subject_slug, "subject"), parent_segments)
         mine = [*self._parent_segments, self.segment]
-        self.signals = SignalsEndpoint(http, mine)
-        self.rules = RulesEndpoint(http, mine)
+        self.signals = SignalsEndpoint(http, mine, workspace_id)
+        self.rules = RulesEndpoint(http, mine, workspace_id)
         self.incidents = SubjectIncidentsEndpoint(http, mine, workspace_id)
         self.maintenance = MaintenanceEndpoint(http, mine, workspace_id)
         self.delivery = AlertDeliveryEndpoint(http, mine, workspace_id)

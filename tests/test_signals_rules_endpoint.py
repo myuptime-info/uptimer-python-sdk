@@ -25,6 +25,7 @@ from uptimer.models.v2 import (
     SIGNAL_KIND_EVENT,
     SIGNAL_KIND_HEARTBEAT,
     SIGNAL_KIND_HTTP,
+    CreateObservationRequest,
     CreateRuleRequest,
     CreateSignalRequest,
     RuleDecision,
@@ -37,6 +38,7 @@ from uptimer.models.v2 import (
 
 BASE = "http://127.0.0.1:2519"
 SUBJECT = "payments-worker"
+WORKSPACE = "ws-1"
 
 
 def _signal(*, slug: str = "worker-pulse", kind: str = SIGNAL_KIND_HEARTBEAT) -> dict:
@@ -275,3 +277,142 @@ def test_deleting_a_rule_names_what_went(
     answer = uptimer_client.v2.subjects(SUBJECT).rules.delete("export-health")
 
     assert answer.rule_id == "export-health"
+
+
+# --- The workspace a caller named has to reach every nested route --------------
+#
+# A subject slug is unique within a workspace, not across them, and the server
+# resolves the subject BEFORE anything else. A caller who says which workspace
+# they mean and is answered `Ambiguous subject` has been let down by the client,
+# not by the server — so these assert the request URL, which is the only place
+# that can be seen.
+
+
+def test_every_signal_route_carries_a_named_workspace(
+    httpx_mock: HTTPXMock,
+    uptimer_client: UptimerClient,
+):
+    base = f"{BASE}/v2/subjects/{SUBJECT}/signals"
+    for url, json_body in (
+        (f"{base}?workspace_id={WORKSPACE}", api_response([_signal()])),
+        (f"{base}?workspace_id={WORKSPACE}", api_response(_signal())),
+        (f"{base}/worker-pulse?workspace_id={WORKSPACE}", api_response(_signal())),
+        (f"{base}/worker-pulse?workspace_id={WORKSPACE}", api_response(_signal())),
+        (
+            f"{base}/worker-pulse?workspace_id={WORKSPACE}",
+            api_response(
+                {
+                    "message": "Signal deleted successfully",
+                    "signal_id": "worker-pulse",
+                    "subject_id": SUBJECT,
+                },
+            ),
+        ),
+    ):
+        httpx_mock.add_response(url=url, json=json_body)
+
+    signals = uptimer_client.v2.subjects(SUBJECT, WORKSPACE).signals
+    signals.all()
+    signals.create(CreateSignalRequest(name="Worker pulse"))
+    signals.get("worker-pulse")
+    signals.update("worker-pulse", UpdateSignalRequest(name="Worker heartbeat"))
+    signals.delete("worker-pulse")
+
+    for request in httpx_mock.get_requests():
+        assert request.url.params.get("workspace_id") == WORKSPACE, request.url
+
+
+def test_every_rule_route_carries_a_named_workspace(
+    httpx_mock: HTTPXMock,
+    uptimer_client: UptimerClient,
+):
+    base = f"{BASE}/v2/subjects/{SUBJECT}/rules"
+    for url, json_body in (
+        (f"{base}?workspace_id={WORKSPACE}", api_response([_rule()])),
+        (f"{base}?workspace_id={WORKSPACE}", api_response(_rule())),
+        (f"{base}/export-health?workspace_id={WORKSPACE}", api_response(_rule())),
+        (f"{base}/export-health?workspace_id={WORKSPACE}", api_response(_rule(version=2))),
+        (
+            f"{base}/export-health?workspace_id={WORKSPACE}",
+            api_response(
+                {
+                    "message": "Rule deleted successfully",
+                    "rule_id": "export-health",
+                    "subject_id": SUBJECT,
+                },
+            ),
+        ),
+    ):
+        httpx_mock.add_response(url=url, json=json_body)
+
+    rules = uptimer_client.v2.subjects(SUBJECT, WORKSPACE).rules
+    rules.all()
+    rules.create(CreateRuleRequest(name="Export health"))
+    rules.get("export-health")
+    rules.update("export-health", UpdateRuleRequest(name="Export health"))
+    rules.delete("export-health")
+
+    for request in httpx_mock.get_requests():
+        assert request.url.params.get("workspace_id") == WORKSPACE, request.url
+
+
+def test_observations_carry_it_too(httpx_mock: HTTPXMock, uptimer_client: UptimerClient):
+    """
+    Check the sixth route of the signals family.
+
+    Reporting an observation resolves the subject exactly as the other five do,
+    so a named workspace has to reach it as well.
+    """
+    httpx_mock.add_response(
+        url=f"{BASE}/v2/subjects/{SUBJECT}/signals/worker-pulse/observations"
+        f"?workspace_id={WORKSPACE}",
+        json=api_response(
+            {
+                "subject_id": SUBJECT,
+                "signal_id": "worker-pulse",
+                "observed_at": "2026-09-01T12:00:00Z",
+                "received_at": "2026-09-01T12:00:01Z",
+                "status": "ok",
+                "value": None,
+                "error": "",
+                "labels": {},
+                "accepted": True,
+                "reject_reason": "accepted",
+                "kind": "observation",
+            },
+        ),
+    )
+
+    observations = (
+        uptimer_client.v2.subjects(SUBJECT, WORKSPACE).signals("worker-pulse").observations
+    )
+    observations.create(CreateObservationRequest(status="ok"))
+
+    assert httpx_mock.get_requests()[0].url.params.get("workspace_id") == WORKSPACE
+
+
+def test_no_workspace_sends_no_parameter(
+    httpx_mock: HTTPXMock,
+    uptimer_client: UptimerClient,
+):
+    """
+    A caller who named no workspace still sends none.
+
+    The server searches the memberships in that case, which is the behaviour a
+    single-workspace user has always had.
+    """
+    httpx_mock.add_response(
+        url=f"{BASE}/v2/subjects/{SUBJECT}/signals",
+        json=api_response([]),
+    )
+    httpx_mock.add_response(
+        url=f"{BASE}/v2/subjects/{SUBJECT}/rules",
+        json=api_response([]),
+    )
+
+    uptimer_client.v2.subjects(SUBJECT).signals.all()
+    uptimer_client.v2.subjects(SUBJECT).rules.all()
+
+    for request in httpx_mock.get_requests():
+        assert "workspace_id" not in request.url.params
+        assert "?" not in str(request.url)
