@@ -1,3 +1,53 @@
+## 1.8.0 (2026-09-19)
+
+Targets Uptimer **1.8.0** and later.
+
+### Feat
+
+- **notifications**: `client.v2.notifications.destinations` — list, create, get,
+  update, delete, plus `set_enabled`, `make_default` and `send_test`. A
+  destination is one place a workspace's alerts can go: a Slack incoming
+  webhook, or any HTTP endpoint.
+- **notifications**: `client.v2.notifications.transformations` — list, create,
+  get, update, delete, plus `samples` (the field vocabulary a template may
+  read) and `preview` (the same judgement a save makes, storing nothing). A
+  template is stored only once it renders all three messages.
+- **notifications**: `client.v2.notifications.deliveries.all(...)` — the
+  delivery log, filtered by destination and by undelivered. Records are kept 30
+  days.
+- **delivery**: `client.v2.subjects(slug).delivery` and
+  `client.v2.monitoring.websites(id).delivery` — `get`, `replace` and `clear`
+  for which destinations one subject tells, and about what. The table is the
+  resource: a save replaces it rather than merging.
+- **signals**: `client.v2.subjects(slug).signals` — list, create, get, update
+  and delete. Reporting observations to an existing signal is unchanged.
+- **rules**: `client.v2.subjects(slug).rules` — list, create, get, update and
+  delete, with typed policy models (`RuleDocument`, `RuleInput`,
+  `RuleDecision`, `RuleWait`). A rule input citing another rule is `from_rule`
+  in Python, because `from` is a keyword.
+
+### Fix
+
+- **subjects**: a `workspace_id` given to `client.v2.subjects(slug, ws)` now
+  reaches the signal, rule and observation routes under it. Without it, a
+  caller holding the same subject slug in two workspaces was answered
+  `Ambiguous subject` by the server — by the one call that could have
+  disambiguated.
+- **compat**: `uptimer.__version__` is bumped with the package, so the minimum
+  server version it derives is the version this package targets. It had
+  drifted: 1.7.0 moved `pyproject.toml` alone, and the published client went on
+  accepting a 1.6.0 server.
+
+### Docs
+
+- The README documents only what this package implements, with runnable
+  examples for destinations, transformations, subject delivery, the delivery
+  log, signals and rules. The complete HTTP API — including anything not
+  wrapped here — is at
+  <https://uptimer.myuptime.info/latest/reference/rest-api/>.
+- That policy is now written down for contributors and agents in `AGENTS.md`
+  and `.cursor/rules/sdk-docs-implemented-only.mdc`.
+
 ## 1.7.0 (2026-09-14)
 
 ### Feat
