@@ -51,9 +51,10 @@ class Subject:
     first half of the observation route, and a rename never moves it. There is
     no database id in the payload.
 
-    `signal_count` and `rule_count` are how much is under the subject. This SDK
-    wraps no signals or rules collection, so they are the way to see that a
-    subject you just created really is empty.
+    `signal_count` and `rule_count` are how much is under the subject, without
+    listing either — enough to see at a glance that one you just created is
+    empty. The collections themselves are `subjects(slug).signals` and
+    `subjects(slug).rules`.
     """
 
     id: str

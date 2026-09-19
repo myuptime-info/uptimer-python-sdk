@@ -1,0 +1,47 @@
+---
+description: SDK docs describe only what this package implements — no gaps, no roadmap, no release process
+alwaysApply: true
+---
+
+# SDK docs describe only what this package implements
+
+Applies to everything a user of the published package reads: `README.md` (which
+is also the PyPI long description), docstrings under `src/`, and `examples/`.
+
+## The rule
+
+**Document only capabilities present in this package version.** That is all.
+
+A README is a contract for the package somebody just installed, not a status
+board for the work around it.
+
+## Do not write
+
+- "this SDK does not wrap those routes **yet**", "not implemented", "missing",
+  "unsupported" — anything that describes an absence;
+- "not in the published package", "until X is on PyPI", "use a checkout of this
+  repository" — release sequencing and workarounds;
+- ticket or issue numbers, internal milestones, or which release something is
+  planned for;
+- TODOs or roadmap notes in public docstrings.
+
+## Do instead
+
+- **Omit it.** A capability this package does not have simply does not appear.
+  The reader loses nothing: they cannot call it either way.
+- Where the HTTP API has something the package does not, the
+  [REST documentation](https://uptimer.myuptime.info/latest/reference/rest-api/)
+  covers it. Link that for the full reference when it helps — without saying
+  what is missing here.
+- State the **server** a capability needs when it is not the package minimum
+  ("needs an Uptimer 1.7.0+ server"). That is a fact about an implemented
+  feature, not a gap.
+- When something ships, add it to the docs in the same change that adds the
+  code.
+
+## Why
+
+Users read this to decide what to call. "We have not wrapped that yet" answers a
+question nobody asked and dates the moment it is written; a checkout instruction
+sends somebody around a problem that a later release quietly removed. Both have
+happened here.
