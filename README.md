@@ -192,9 +192,11 @@ locations, so it has its own call — `client.v2.monitoring.websites.create` —
 and asking for `subject_kind="website"` on this route is refused with a message
 saying so.
 
-**Signals and rules are added in the Uptimer UI.** Uptimer 1.6.0 also serves
-them over the API, under `/v2/subjects/{subject}/signals` and
-`/v2/subjects/{subject}/rules`; this SDK does not wrap those routes yet.
+**Signals and rules are configured in the Uptimer UI**, on the subject's own
+page. This SDK reports observations to a signal that already exists — see
+[Reporting your own observations](#reporting-your-own-observations). The REST
+routes behind those screens are documented in the
+[Uptimer REST API reference](https://uptimer.myuptime.info/latest/reference/rest-api/).
 
 ### Reporting your own observations
 
@@ -265,12 +267,8 @@ under its subject on v2. Neither method falls back to the other, and there is no
 kind-agnostic one: acknowledging is a claim about a specific incident, and an
 SDK that guessed which family it belonged to could claim the wrong one.
 
-**Availability.** These methods are part of the SDK's **1.7.0** release: they are
-not in the published 1.6.0 package, so until 1.7.0 is on PyPI use them from a
-checkout of this repository. They need a matching **Uptimer 1.7.0+** server —
-the routes do not exist before that — and on
-[myuptime.info](https://myuptime.info) they arrive when the hosted service picks
-up the 1.7.0 API.
+**Availability.** These methods need a matching **Uptimer 1.7.0+** server — the
+routes do not exist before that.
 
 **Custom monitoring** — list the subject's open incidents, pick one, acknowledge
 it by id:

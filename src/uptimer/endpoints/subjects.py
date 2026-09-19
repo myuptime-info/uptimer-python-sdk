@@ -113,10 +113,9 @@ class SignalsEndpoint(BaseEndpoint):
     Call it with a slug to reach one:
     `client.v2.subjects("nightly-export").signals("worker-pulse")`.
 
-    There is no listing or authoring here. Uptimer 1.6.0 serves those routes —
-    the Signals screen has an API half — but this SDK does not wrap them yet:
-    add a signal in the Uptimer UI, and use this to report data to one that
-    already exists.
+    This is the path to a signal that already exists, so observations can be
+    reported to it. Signals are created and edited in the Uptimer UI, on the
+    subject's own page.
     """
 
     def __init__(
