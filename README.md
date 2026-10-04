@@ -1,12 +1,9 @@
 # Uptimer Python SDK
 
-A Python SDK for hosted and self-hosted Uptimer.
+A Python client for the Uptimer 2.0 API (v3): Resources, Templates,
+Observations, Incidents, maintenance and acknowledgement.
 
-* [Hosted Uptimer](https://myuptime.info)
 * [Self-hosted documentation](https://uptimer.myuptime.info)
-* [PyPI package](https://pypi.org/project/uptimer-python-sdk/)
-* [Uptimer resources](https://myuptime.info/resources)
-* [Product updates](https://myuptime.info/product-updates)
 
 ## License
 
@@ -14,798 +11,118 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 For third-party license information, see the [NOTICE](NOTICE) file.
 
-## Installation 
+## Installation
 
 ```shell
 pip install uptimer-python-sdk
 ```
 
-or 
-```shell
-uv add uptimer-python-sdk
-```
-
-**This package targets Uptimer 1.8.0 and later.** The SDK's major.minor tracks
-the server release it speaks to, so install the one that matches yours; patch
-numbers move independently. `client.ensure_compatible()` checks it for you and
-fails with a message that names the fix.
-
-Still on API v1? Pin `uptimer-python-sdk<1`. The server's v1 is unchanged and
-supported, so 0.4.x keeps working — it just cannot use anything newer.
-
-The complete REST API reference is at
-[uptimer.myuptime.info](https://uptimer.myuptime.info/latest/reference/rest-api/).
+**This package speaks API v3 and targets Uptimer 2.0.0 and later.** Its
+major.minor tracks the server release it speaks to.
+`client.check_compatibility()` fails with `IncompatibleServerError` against a
+server that does not serve API v3.
 
 ## Usage
 
-### Create client
-
-#### self-hosted
-
 ```python
-from uptimer.client import UptimerClient
-client = UptimerClient(
-    api_key="your-api-key-here",
-    base_url="http://127.0.0.1:2517/api",  # or your custom base URL
-)
-```
-
-#### cloud  
-```python
-from uptimer.client import UptimerCloudClient
-client = UptimerCloudClient(
-    api_key="your-api-key-here",
-)
-```
-
-### Basic example
-
-```python
-from uptimer.client import UptimerClient
-from uptimer.errors import (
-    DefaultUptimerApiError,
-    IncompatibleServerError,
-    UptimerError,
-    UptimerInvalidHttpCodeError,
-)
-from uptimer.models.v2 import (
-    AGREEMENT_MAJORITY,
-    CreateWebsiteMonitorRequest,
-    UpdateWebsiteMonitorRequest,
-    WebsiteMonitorRequest,
-    WebsiteMonitorResponse,
-    WebsiteMonitorResponseBody,
-)
+from uptimer import UptimerClient
 
 client = UptimerClient(
-    api_key="your-api-key-here",
-    base_url="http://127.0.0.1:2517/api",  # or your custom base URL
+    api_key="your-api-key",                 # User → API keys
+    base_url="http://127.0.0.1:8080/api",   # your server, plus /api
 )
-
-# Optional: fail fast with a message that names the fix, rather than a 404 on
-# the first real call.
-print("server:", client.check_compatibility())
-
-workspace = client.v2.workspaces.all()[0]
-locations = [location.name for location in client.v2.locations.all()]
-
-monitor = client.v2.monitoring.websites.create(
-    CreateWebsiteMonitorRequest(
-        name="Checkout API",
-        interval=60,  # seconds between probes
-        workspace_id=workspace.id,
-        request=WebsiteMonitorRequest(
-            url="https://checkout.example/health",
-            method="GET",  # one of GET, POST, PATCH, OPTIONS
-            content_type="application/json",
-            data="",
-        ),
-        response=WebsiteMonitorResponse(
-            statuses=[200, 201],  # any of these means the site is up
-            body=WebsiteMonitorResponseBody(content="ok"),  # expected substring
-        ),
-        locations=locations,
-        # How many locations must report a problem before this monitor does:
-        # "any", "majority" or "all". Omit to keep the server default.
-        agreement=AGREEMENT_MAJORITY,
-    ),
-)
-
-monitor = client.v2.monitoring.websites.update(
-    monitor.id,
-    UpdateWebsiteMonitorRequest(
-        name="Checkout API",
-        interval=120,
-        request=WebsiteMonitorRequest(url="https://checkout.example/health", method="GET"),
-        response=WebsiteMonitorResponse(statuses=[200]),
-        locations=locations,
-        # Omitting agreement here keeps the stored one.
-    ),
-)
-
-# What is wrong right now. Only open incidents come back.
-for incident in client.v2.incidents.all(workspace.id):
-    print(incident.monitor_name, incident.status, incident.locations.failing)
-
-try:
-    client.v2.monitoring.websites.delete(monitor.id)
-except DefaultUptimerApiError as e:
-    # error responses from the uptimer server
-    print(
-        e.message,  # user message
-        e.code,  # error id
-        e.error_type,  # class of error
-        e.details,  # detailed message for a developer
-    )
-except IncompatibleServerError as e:
-    # the server does not provide API v2 — see Migrating from 0.4.x below
-    print(e)
-except UptimerInvalidHttpCodeError as e:
-    # the uptimer api always returns 200; anything else is a transport error.
-    # a 404 really is "no such URL", not "no object with that id".
-    print(e.url, e.status_code)
-except UptimerError:  # base error, if you need one
-    raise
+client.check_compatibility()
 ```
 
-### Subjects: your custom monitoring
+The key is a person's key: it reads and writes what that person may in each
+Workspace. A viewer reads; changing a Workspace is an editor's or an owner's;
+any member may acknowledge an Incident.
 
-A **subject** is one monitored thing. Every subject is one of two kinds, and the
-kind says how it is configured:
-
-- **website** — Uptimer's own probe watches a URL, and the website check form
-  owns its signal and its rule;
-- **custom** — yours, reporting through the signals you add to it.
-
-Uptimer 1.6.0 splits its API along that line, and so does this SDK: website
-monitoring is `client.v2.monitoring.websites`, and `client.v2.subjects` is the
-**custom** half. Neither serves the other's subjects — passing a website
-subject's slug to a `subjects` call is refused.
-
-Requires Uptimer 1.6.0 or later.
+### Workspaces, Templates, Locations
 
 ```python
-from uptimer.client import UptimerClient
-from uptimer.models.v2 import SUBJECT_KIND_CUSTOM, CreateSubjectRequest
-
-client = UptimerClient(
-    api_key="your-api-key-here",
-    base_url="http://127.0.0.1:2517/api",
-)
-
-# The workspace's custom subjects. Website checks are not here.
-for subject in client.v2.subjects.all("your-workspace-id"):
-    print(subject.id, subject.subject_kind, subject.signal_count)
-
-# Create an empty custom subject. It arrives with nothing under it: no signal,
-# no rule, no HTTP probe — add a signal to it in the Uptimer UI, then report to
-# that signal with the observations API below.
-created = client.v2.subjects.create(
-    CreateSubjectRequest(name="Nightly export", workspace_id="your-workspace-id"),
-)
-assert created.subject_kind == SUBJECT_KIND_CUSTOM
-assert created.signal_count == 0
-
-# `id` is the subject's slug — the same name the observation route addresses it
-# by, and it never moves when the subject is renamed.
-fetched = client.v2.subjects.get(created.id, workspace_id="your-workspace-id")
+client.workspaces()   # [Workspace(id, name, role)]
+client.templates()    # the Templates this server publishes, with their fields
+client.locations()    # [Location(id, name)]
+ws = client.workspace("<workspace id>")
 ```
 
-`kind` and `subject_kind` are different fields on purpose. `kind` is `"subject"`
-on every one of these objects — it says what you are holding, the way every v2
-object does. `subject_kind` says how the subject is configured, and against a
-1.6.0 server everything these calls return reads `"custom"`; `is_custom` is the
-typed way to read it. `SUBJECT_KIND_WEBSITE` and `is_website` stay in the model
-for a payload from an older server.
+### Resources
 
-**Website monitoring is not created here.** It needs a URL, an interval and
-locations, so it has its own call — `client.v2.monitoring.websites.create` —
-and asking for `subject_kind="website"` on this route is refused with a message
-saying so.
-
-### Signals: what reports to a subject
-
-A **signal** is one thing that reports. A **heartbeat** is expected to keep
-reporting, so its silence is itself a symptom; an **event** reports only when
-there is something to say, so its silence means nothing. The kind is fixed when
-the signal is created — senders are already posting to it, and changing what
-their silence means underneath them is not a rename.
+A Resource is addressed by its `id` or by its `key`.
 
 ```python
-from uptimer.models.v2 import (
-    SIGNAL_KIND_HEARTBEAT,
-    CreateSignalRequest,
-    UpdateSignalRequest,
+resource = ws.resources.create(
+    template="website-check",
+    key="checkout-api",
+    name="Checkout API",
+    meta={"url": "https://checkout.example.com/health", "locations": [location_id],
+          "interval_value": 5, "interval_unit": "MINUTE",
+          "failure_mode": "at_least_one", "confirm_after": 0, "recover_after": 0},
 )
-
-signals = client.v2.subjects("nightly-export", "your-workspace-id").signals
-
-signal = signals.create(
-    CreateSignalRequest(
-        name="Worker pulse",
-        kind=SIGNAL_KIND_HEARTBEAT,
-        meta={"team": "payments"},          # stored and returned untouched
-    ),
-)
-
-# `id` is the slug a sender posts to. A rename never moves it.
-signals.update(signal.id, UpdateSignalRequest(name="Worker heartbeat", meta={}))
-
-for existing in signals.all():
-    print(existing.id, existing.signal_kind)
-
-# Deleting a signal deletes its observations. One a rule reads is refused:
-# retarget or remove those rules first.
-signals.delete(signal.id)
+ws.resources.list()
+ws.resources.get("checkout-api")      # with signals, rules and each rule's latest result
+ws.resources.update("checkout-api", name="Checkout", meta={"confirm_after": 60})
 ```
 
-### Rules: what counts as a problem
+`resource.rules[i]` carries `status`, `explanation`, `since` and
+`open_incident` once the Rule has decided.
 
-A **rule** reads a subject's signals — or another of its rules — and decides
-whether there is a problem. The policy is a document: what it reads, what those
-inputs have to agree on, and how long a state must hold.
+### Observations
 
 ```python
-from uptimer.models.v2 import (
-    INPUT_MODE_LATEST_VALUE,
-    INPUT_MODE_STATUS,
-    NEED_ANY,
-    CreateRuleRequest,
-    RuleDecision,
-    RuleDocument,
-    RuleInput,
-    RuleWait,
-    UpdateRuleRequest,
-)
-
-rules = client.v2.subjects("nightly-export", "your-workspace-id").rules
-
-rule = rules.create(
-    CreateRuleRequest(
-        name="Export health",
-        document=RuleDocument(
-            inputs=[
-                # The heartbeat stopped, or its last observation said "problem".
-                RuleInput(signal="worker-pulse", mode=INPUT_MODE_STATUS,
-                          no_data_after="5m"),
-                # A number out of range.
-                RuleInput(signal="queue-depth", mode=INPUT_MODE_LATEST_VALUE,
-                          compare=">", threshold=1000),
-                # Another rule's verdict. `from` is a Python keyword, so it is
-                # `from_rule` here and `from` on the wire.
-                RuleInput(from_rule="queue-health"),
-            ],
-            decision=RuleDecision(need=NEED_ANY),
-            wait=RuleWait(confirm_after="2m", close_after="2m"),
-        ),
-    ),
-)
-
-# The policy is a REPLACEMENT, not a patch: read it, change it, send the whole
-# thing back. A CHANGED policy increments policy_version; sending the same
-# document back leaves it where it was. Either way the rule keeps its slug, so
-# the incidents already pointing at it stay attached.
-rule.document.wait.confirm_after = "5m"
-rules.update(rule.id, UpdateRuleRequest(name=rule.name, document=rule.document))
-
-rules.delete(rule.id)
+ws.resources.observe("checkout-api", signal=resource.signals[0].key,
+                     state="problem", labels={"status": "503"})
+ws.resources.observations("checkout-api", limit=20)   # newest first
 ```
 
-Durations are strings — `"5m"`, `"2m0s"` — so a stored policy reads the way you
-would write it. Every input must cite a signal or a rule **of this subject**: a
-subject is the boundary, so add the signals first.
+`state` is `ok` or `problem`. The same `observation_id` sent twice is stored
+once. The observation log is investigation context, not a record of what a
+decision read.
 
-### Reporting your own observations
-
-Uptimer probes websites itself. For anything else — a cron job, a queue worker,
-a nightly export — you add a **custom signal** to a subject in the Uptimer UI
-and report to it yourself.
-
-Requires Uptimer 1.6.0 or later, and a **custom heartbeat or event** signal. The
-platform HTTP signal of a website monitor is written by Uptimer's own probe and
-refuses posted observations.
+### Incidents
 
 ```python
-from uptimer.client import UptimerClient
-from uptimer.models.v2 import (
-    OBSERVATION_STATUS_OK,
-    OBSERVATION_STATUS_PROBLEM,
-    CreateObservationRequest,
-)
-
-client = UptimerClient(
-    api_key="your-api-key-here",
-    base_url="http://127.0.0.1:2517/api",
-)
-
-# The two slugs are the address: the subject, and the signal within it. Both
-# are shown on the signal's page in the Uptimer UI.
-observations = client.v2.subjects("checkout-api").signals("worker-pulse").observations
-
-# A heartbeat: "I ran, and I am fine."
-stored = observations.create(CreateObservationRequest(status=OBSERVATION_STATUS_OK))
-
-# Everything except status is optional.
-stored = observations.create(
-    CreateObservationRequest(
-        status=OBSERVATION_STATUS_PROBLEM,
-        observed_at="2026-08-30T12:00:00Z",  # RFC 3339; omit to mean "now"
-        value=0.0,                            # optional numeric reading
-        error="queue backlog over threshold",
-        labels={"instance": "worker-3", "env": "prod"},
-    ),
-)
-
-print(stored.accepted, stored.reject_reason)
+page = ws.incidents.list(lifecycle="open", limit=50)        # newest first
+page.next_cursor                                            # None on the last page
+ws.incidents.list(resource="checkout-api", rule="availability",
+                  lifecycle="closed", confirmation="unconfirmed")
+for incident in ws.incidents.iterate(lifecycle="open"):     # every page
+    ...
+incident = ws.incidents.get(incident_id)                    # with ordered history
+ws.incidents.acknowledge(incident_id)
+ws.resources.incidents("checkout-api")                      # one Resource's Incidents
 ```
 
-`accepted` reports **acceptance, not health**: it says Uptimer stored the
-observation and may evaluate it, not that anything is wrong or fine. Whether an
-observation raises an incident is decided by a *rule* that selects the signal.
+An `Incident` has `lifecycle` (open, closed), `confirmation` (confirmed,
+unconfirmed), `condition` (ok, problem, no_data), the `rule` it was recorded
+with, `explanation`, `opened_at`, `confirmed_at`, `closed_at`, `effective_at`,
+`closed_reason` (recovered, rule_removed) and `acknowledgement`. Its `history`
+is oldest first, and stays after its Rule is edited or removed.
 
-An observation Uptimer keeps but will not evaluate — one stamped too far in the
-future, say — comes back with `accepted=False` and a `reject_reason` such as
-`clock_skew`. It is **returned, not raised**: it was received. An exception
-means nothing was stored.
-
-Retries are safe. An observation is identified by its signal, its `observed_at`
-and its labels, so re-sending the same one replaces it rather than counting
-twice.
-
-### Acknowledging an incident
-
-**New in 1.7.0.** Acknowledging says a **person has seen** an open incident. It
-changes nothing the engine decided — the verdict, the evidence, the close hold
-and the alerting all carry on — and it is recorded once, with who and when.
-
-Each kind of monitoring acknowledges through **its own family**, the same split
-subjects follow: a website incident under its monitor on v1, a custom incident
-under its subject on v2. Neither method falls back to the other, and there is no
-kind-agnostic one: acknowledging is a claim about a specific incident, and an
-SDK that guessed which family it belonged to could claim the wrong one.
-
-**Availability.** These methods need an **Uptimer 1.7.0+** server — the routes
-do not exist before that.
-
-**Custom monitoring** — list the subject's open incidents, pick one, acknowledge
-it by id:
+### Maintenance
 
 ```python
-from uptimer.client import UptimerClient
-
-client = UptimerClient(
-    api_key="your-api-key-here",
-    base_url="http://127.0.0.1:2517/api",
-)
-
-subject = client.v2.subjects("payments-worker", "your-workspace-id")
-
-# Open incidents of this subject: all of them, newest trouble first. A subject
-# can have one open per rule, so each names the rule that opened it.
-open_incidents = subject.incidents.all()
-for incident in open_incidents:
-    print(incident.id, incident.rule_name, incident.status, incident.acknowledged)
-
-# Nothing open is an ordinary answer, not an error.
-if open_incidents:
-    # Acknowledge the one you mean, by the id the listing gave you. No body and
-    # no actor argument: the person recorded is the owner of the API key, at the
-    # time of the call.
-    target = open_incidents[0]
-    record = subject.incidents(target.id).acknowledge()
-    print(record.acknowledged_by, record.acknowledged_at, record.recorded)
+ws.resources.set_maintenance("checkout-api", minutes=60)   # holds notifications
+ws.resources.end_maintenance("checkout-api")
 ```
 
-**Website monitoring** — the ids come from the workspace incident list this SDK
-has had since 1.5.0, which already names each incident's monitor:
-
-```python
-# An empty list means nothing is wrong: the loop simply does not run.
-for incident in client.v2.incidents.all("your-workspace-id"):
-    record = client.v1.rules(incident.monitor_id).incidents(incident.id).acknowledge()
-    print(record.incident_id, record.acknowledged_by, record.recorded)
-```
-
-`client.v1` exists for this one route. This is still a v2 client — website
-monitors are read and written through `client.v2.monitoring.websites` — but
-Uptimer serves website acknowledgement under `/v1/rules/...`, because website
-monitoring is v1's resource and custom monitoring is v2's.
-
-What the answer says:
-
-| field | meaning |
-|---|---|
-| `recorded` | whether **this call** wrote it. `False` means it was already acknowledged and nothing changed |
-| `acknowledged_by` / `acknowledged_at` | the record — on a repeat, the **first** person's name and time, not yours |
-| `status` | the incident's condition, unchanged by acknowledging it |
-| `monitor_id` | set for a website incident; `None` for a custom one |
-| `subject_id` / `rule_id` | set for a custom incident; `None` for a website one |
-| `closed_at` | set if the incident had already closed |
-
-**Repeating it is safe.** A second call adds no second history entry and returns
-the original name and time with `recorded=False` — so a retry after a timeout is
-not a second claim.
-
-**Refusals are raised, never worked around.** A `DefaultUptimerApiError` means
-the incident is not this parent's — another monitor's, another subject's,
-another workspace's, or the other kind of monitoring. Nothing is retried through
-the other family.
-
-**Closing cuts both ways, and the two are different.** A **first**
-acknowledgement of an incident that has already closed is refused
-(`Incident is closed`): there is nothing left to be on, and anything open now is
-a different incident. But an incident acknowledged **while it was open** keeps
-that record after it closes, so asking again is not an error — it answers the
-original name and time with `recorded=False` and `closed_at` set. The look did
-happen.
-
-### Maintenance windows
-
-**New in 1.7.0.** A maintenance window holds back one subject's **problem**
-notifications until a time you choose — for a deploy, a migration, anything that
-will make it look broken on purpose. Monitoring, incidents and the timeline are
-untouched, and **recoveries are never held back**: "it is back" is the message
-you most want afterwards.
-
-Same availability as acknowledgement above: the SDK's 1.7.0 release against an
-uptimer 1.7.0+ server, Custom subjects only (a website check is put into
-maintenance from its page in the dashboard).
-
-```python
-maintenance = client.v2.subjects("payments-worker", "your-workspace-id").maintenance
-
-# Nothing scheduled is None — an answer, not an error.
-if maintenance.get() is None:
-    window = maintenance.start("2026-09-13T18:00:00Z")
-    print(window.active, window.ends_at, window.muted)
-
-# The work is taking longer: move the end of the SAME window.
-maintenance.update_end("2026-09-13T20:00:00Z")
-
-# When it is done. Notifications are normal again immediately.
-maintenance.cancel()
-```
-
-`ends_at` is RFC 3339 and carries its own zone, for both `start` and
-`update_end`. The window starts **immediately**.
-
-`update_end` is a real update, not a cancel and a new window: it keeps the
-window's identity and its start, so "since when have we been silencing this?"
-keeps one answer and nothing sees the subject briefly leave maintenance. Moving
-the end into the past raises rather than stopping the window — to stop it now,
-`cancel()`.
-
-`MaintenanceWindow` tells its three states apart by its fields — `active` true
-is running, `cancelled_at` set is ended early, and neither is a window that ran
-out — and `muted` says what waits, in the server's own words.
-
-A past end time, a window already running, a website subject, or a caller who is
-not an editor raise `DefaultUptimerApiError`. Reading takes the viewer role.
-
-### Alert destinations
-
-A **destination** is one place a workspace's alerts can go: a Slack incoming
-webhook, or any HTTP endpoint that accepts a POST. A workspace has as many as it
-needs, and each subject chooses which of them it tells.
-
-Reading a destination takes the **editor** role, not just membership: a
-destination holds a webhook URL, and a URL is enough for anyone holding it to
-post into your channel.
-
-```python
-from uptimer.models.v2 import (
-    DESTINATION_TYPE_SLACK,
-    DESTINATION_TYPE_WEBHOOK,
-    CreateDestinationRequest,
-    UpdateDestinationRequest,
-)
-
-destinations = client.v2.notifications.destinations
-
-# The FIRST destination in a workspace becomes its default, asked for or not:
-# a workspace whose only destination is not the default notifies nobody.
-slack = destinations.create(
-    CreateDestinationRequest(
-        name="Acme · #incidents",
-        url="https://hooks.slack.com/services/T00/B00/xxxx",
-        destination_type=DESTINATION_TYPE_SLACK,
-        channel="#incidents",          # stored without the '#'
-    ),
-    workspace_id="your-workspace-id",
-)
-
-relay = destinations.create(
-    CreateDestinationRequest(
-        name="Pager relay",
-        url="https://hooks.example.com/uptimer",
-        destination_type=DESTINATION_TYPE_WEBHOOK,
-    ),
-    workspace_id="your-workspace-id",
-)
-
-# Move the address, or attach a payload template (see below). The TYPE is fixed
-# at creation: delete and recreate to change it.
-destinations.update(
-    relay.id,
-    UpdateDestinationRequest(name=relay.name, url="https://hooks.example.com/v2"),
-    workspace_id="your-workspace-id",
-)
-
-destinations.set_enabled(relay.id, enabled=False, workspace_id="your-workspace-id")
-destinations.make_default(slack.id, workspace_id="your-workspace-id")
-
-# A REAL send: same render, same transport, same delivery record as an alert.
-# A destination that refuses it raises, with the far end's own words.
-destinations.send_test(slack.id, workspace_id="your-workspace-id")
-
-# Deleting the default promotes nobody — check what you did.
-answer = destinations.delete(relay.id, workspace_id="your-workspace-id")
-assert answer.was_default is False
-```
-
-`workspace_id` is optional everywhere here. It settles an ambiguity rather than
-being required: these resources have no slug of their own, so the server
-searches your memberships when it is absent and says so if the answer is more
-than one.
-
-### Transformations: the shape a destination receives
-
-A **transformation** is a named template for the body a destination gets — a
-PagerDuty event, your own JSON, a line of text. A destination with none gets
-Uptimer's built-in Slack-shaped message, which is what `transformation_id=None`
-means.
-
-```python
-from uptimer.models.v2 import (
-    CreateTransformationRequest,
-    UpdateDestinationRequest,
-)
-
-transformations = client.v2.notifications.transformations
-
-# The vocabulary: three sample messages, each with every field a template may
-# read. No workspace — these are the product's own fixtures.
-for sample in transformations.samples():
-    print(sample.label, sorted(sample.fields))
-
-# Ask before you write. `passed` is exactly the condition a save enforces.
-preview = transformations.preview(
-    '{"event": "{{ kind }}", "summary": "{{ summary }}"}',
-    workspace_id="your-workspace-id",
-)
-assert preview.passed
-for result in preview.results:
-    print(result.label, result.ok, result.output or result.error)
-
-template = transformations.create(
-    CreateTransformationRequest(
-        name="PagerDuty compact",
-        template='{"event": "{{ kind }}", "summary": "{{ summary }}"}',
-    ),
-    workspace_id="your-workspace-id",
-)
-assert template.content_type == "application/json"
-
-# Attach it. Passing transformation_id=None puts the destination back on
-# Uptimer's own message.
-client.v2.notifications.destinations.update(
-    slack.id,
-    UpdateDestinationRequest(
-        name=slack.name,
-        url=slack.url,
-        channel=slack.channel,
-        transformation_id=template.id,
-    ),
-    workspace_id="your-workspace-id",
-)
-```
-
-**A template is stored only once it renders all three messages.** There is no
-force flag: a template that breaks on one of them raises, naming the sample that
-broke, and a refused edit leaves the stored template exactly as it was. A
-template starting with `{` or `[` is treated as JSON — values are escaped as
-they are substituted and the result has to parse, so a quoted error cannot break
-the document.
-
-### Alert delivery: which destinations a subject tells
-
-The choice lives on the **subject**, not on the workspace: the marketing site
-telling nobody must not stop the payments API paging the on-call.
-
-```python
-from uptimer.models.v2 import (
-    ALERT_KIND_NO_DATA,
-    ALERT_KIND_PROBLEM,
-    ALERT_KIND_RECOVERY,
-    DeliverySelection,
-)
-
-delivery = client.v2.subjects("nightly-export", "your-workspace-id").delivery
-
-table = delivery.get()
-if table.uses_workspace_default:
-    print("this subject falls back to", table.default_destination_id)
-elif table.is_silent:
-    print("nothing is sent for this subject")
-
-# The body is the WHOLE table: what you send is what the subject will have.
-delivery.replace(
-    [
-        DeliverySelection(
-            destination_id=slack.id,
-            alert_kinds=[ALERT_KIND_PROBLEM, ALERT_KIND_NO_DATA, ALERT_KIND_RECOVERY],
-        ),
-        DeliverySelection(destination_id=relay.id, alert_kinds=[ALERT_KIND_PROBLEM]),
-    ],
-)
-
-# Back to the workspace default — or to silence, if there is no default.
-delivery.clear()
-```
-
-A reminder about an unanswered problem rides with `problem`: a destination that
-hears about problems hears the four-hourly reminders too, which is why there is
-no fourth alert kind.
-
-A **website monitor** carries the same table on its own collection, because
-`/v2/subjects` serves Custom subjects only:
-
-```python
-client.v2.monitoring.websites("monitor-id").delivery.get()
-```
-
-Saving a table changes delivery **only**. Signals, rules, incidents,
-acknowledgement and maintenance are untouched, and nothing is sent by saving.
-
-### Delivery log: what was actually sent
-
-```python
-records = client.v2.notifications.deliveries.all(
-    workspace_id="your-workspace-id",
-    destination_id=slack.id,        # optional: one destination
-    undelivered=True,               # optional: only what did not arrive
-)
-
-for record in records:
-    print(record.at, record.destination_name, record.status)
-    if not record.delivered:
-        print("  refused:", record.error)
-```
-
-It is a read — nothing here sends or resends, and there is no retry. Each record
-keeps the destination's **name and type as they were at the attempt**, so a
-rename or a delete later leaves the row still saying where the message went; the
-webhook URL is never recorded. Records are kept **30 days**.
-
-### Incident status
-
-`client.v2.incidents.all()` returns only **open** incidents. `status` carries the
-same words the Uptimer screens show, so a client and the UI cannot disagree:
-
-| status | meaning |
-|---|---|
-| `problem` | confirmed, and notifications have gone out |
-| `pending` | failing, but inside the confirm hold — **nobody has been notified yet** |
-| `recovering` | reporting ok again while the incident is still open |
-| `no_data` | nothing usable arrived; a silent location counts toward the agreement |
-| `ok` | healthy |
-
-`locations.failing` / `.unknown` / `.ok` is the evidence the verdict was taken
-from. A location that has never reported stays in `unknown` — that is a real
-state, not a missing one.
-
-### Migrating from 0.4.x
-
-**1.5.0 targets API v2 only.** Your existing 0.4.x code keeps working against
-the server — API v1 is unchanged and supported — but it must stay on the 0.4.x
-SDK. Pin `uptimer-python-sdk<1` if you are not ready to move.
-
-What changed:
-
-| 0.4.x (API v1) | 1.5.0 (API v2) |
-|---|---|
-| `client.v1.workspaces` | `client.v2.workspaces` |
-| `client.v1.regions` | `client.v2.locations` |
-| `client.v1.rules` | `client.v2.monitoring.websites` |
-| `Region` | `Location` |
-| `Rule`, `CreateRuleRequest` | `WebsiteMonitor`, `CreateWebsiteMonitorRequest` |
-| `regions=[...]` | `locations=[...]` |
-| — | `agreement="any"｜"majority"｜"all"` |
-| — | `client.v2.incidents` |
-| `from uptimer.models import …` | `from uptimer.models.v2 import …` |
-
-**The version namespace stays, and now covers the types too.** As in 0.4.x,
-resources sit under the API version that serves them — `client.v1.*` becomes
-`client.v2.*`, not a bare `client.*` — and the models follow: import them from
-`uptimer.models.v2`, not from `uptimer.models`. The HTTP API is versioned by
-path, so the SDK shows the same thing rather than hiding it. There are no
-root-level aliases for either surface, so a stale flat import fails loudly
-instead of silently binding to the wrong thing.
-
-The deserialization exceptions (`ModelError`, `TypeMismatchError`, …) stay on
-`uptimer.models`: the same error is raised whichever API version produced the
-payload, so versioning them would say something untrue.
-
-Why `monitoring.websites` rather than `monitors`: website monitoring is a
-built-in template, not the general model. Keeping the bare name free lets other
-monitor types arrive later without renaming this one.
-
-`client.version()`, `client.check_compatibility()` and
-`client.ensure_compatible()` are unchanged and stay on the client itself —
-`/version` is a shared global endpoint, not a versioned one, so it works against
-any server, including one too old for the rest of this SDK.
-
-**Why 1.5.0 and not 1.0.0:** the SDK's major.minor tracks the uptimer release it
-targets, so the version is the compatibility statement — 1.5.x speaks to uptimer
-1.5.0 and later. Patch numbers are independent, so an SDK fix can ship without a
-server release.
-
-Also, check out the [examples directory](https://github.com/myuptime-info/uptimer-python-sdk/tree/main/examples).
-
-### Development Setup
-
-1. Clone the repository:
-
-```bash
-git clone <repository-url>
-cd uptimer-python-sdk
-```
-
-2. Install dependencies:
-
-```bash
-uv sync --dev
-# for integration tests
-uv run playwright install chromium
-```
-
-3. Run tests:
-
-```bash
-uv run pytest
-# integration
-docker pull ghcr.io/myuptime-info/uptimer:1.3.0
-docker run -p 2517:2517 ghcr.io/myuptime-info/uptimer:1.3.0
-UPTIMER_URL=http://localhost:2517 uv run --integration
-```
-
-4. Run linting:
-
-```bash
-uv run ruff check .
-uv run mypy src
-```
-
-5. Format code:
-
-```bash
-uv run ruff format .
-```
-
-6. Run pre-commit hooks:
-
-```bash
-uv run pre-commit run --all-files
-```
-
-## Third-Party Licenses
-
-This project uses the following third-party libraries:
-
-### Production Dependencies
-
-- **httpx** (BSD 3-Clause License) - HTTP client for Python
-
-### Development Dependencies
-
-- **mypy** (Apache 2.0 License) - Static type checker
-- **playwright** (Apache 2.0 License) - Browser automation
-- **pre-commit** (MIT License) - Git hooks framework
-- **pytest** (MIT License) - Testing framework
-- **pytest-cov** (MIT License) - Coverage plugin for pytest
-- **pytest-httpx** (MIT License) - HTTPX plugin for pytest
-- **pytest-playwright** (MIT License) - Playwright plugin for pytest
-- **responses** (Apache 2.0 License) - Mock library for requests
-- **ruff** (MIT License) - Fast Python linter and formatter
-
-All third-party licenses are compatible with the MIT License used by this project. Note that the BSD 3-Clause License (used by httpx) includes an additional restriction prohibiting the use of the copyright holder's name for endorsement without permission.
+### Errors
+
+Every refusal raises a subclass of `UptimerApiError` with `code`,
+`error_type`, `message`, `details` and the HTTP `status`:
+
+| Exception | Code | When |
+|---|---|---|
+| `BadRequestError` | 1400 | the request could not be read |
+| `AuthenticationError` | 1401 | no API key, or one the server does not accept |
+| `ForbiddenError` | 1403 | your role does not allow this write |
+| `NotFoundError` | 1404 | no such thing in this Workspace, or no such Workspace for you |
+| `ConflictError` | 1409 | e.g. acknowledging a closed or already acknowledged Incident |
+| `ValidationError` | 1422 | a field was refused; `.field` names it |
+| `ServerError` | 1500 | the server failed |
+
+## Examples
+
+See [`examples/`](examples/): from a key to an Incident, and a fleet from one
+Template.

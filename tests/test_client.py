@@ -1,156 +1,144 @@
-from pytest_httpx import HTTPXMock
+from __future__ import annotations
 
-from tests.conftest import api_response
-from uptimer.client import UptimerClient, UptimerCloudClient
-from uptimer.compat import MINIMUM_UPTIMER_VERSION
-from uptimer.endpoints.incidents import IncidentsEndpoint
-from uptimer.endpoints.locations import LocationsEndpoint
-from uptimer.endpoints.v1 import RulesEndpoint, V1Endpoint
-from uptimer.endpoints.v2 import V2Endpoint
-from uptimer.endpoints.websites import MonitoringEndpoint
-from uptimer.endpoints.workspaces import WorkspacesEndpoint
+import json
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING, Any, Iterator
 
-# The resources a caller reaches through client.v2, and nothing else.
-V2_RESOURCES = ("workspaces", "locations", "incidents", "monitoring")
+import pytest
 
+from uptimer import (
+    AuthenticationError,
+    ConflictError,
+    ForbiddenError,
+    IncompatibleServerError,
+    NotFoundError,
+    UptimerClient,
+    ValidationError,
+)
 
-def test_client_exposes_v2_resources_under_the_version_namespace(
-    uptimer_client: UptimerClient,
-):
-    assert isinstance(uptimer_client.v2, V2Endpoint)
-    assert isinstance(uptimer_client.v2.workspaces, WorkspacesEndpoint)
-    assert isinstance(uptimer_client.v2.locations, LocationsEndpoint)
-    assert isinstance(uptimer_client.v2.incidents, IncidentsEndpoint)
-    assert isinstance(uptimer_client.v2.monitoring, MonitoringEndpoint)
+if TYPE_CHECKING:
+    from pytest_httpx import HTTPXMock
 
-
-def test_client_keeps_no_root_level_aliases(uptimer_client: UptimerClient):
-    # The API is versioned by path, so the SDK keeps the version visible. A
-    # root alias would let code drift into looking version-agnostic when it is
-    # not (Decision 0012).
-    for resource in V2_RESOURCES:
-        assert not hasattr(uptimer_client, resource), (
-            f"client.{resource} must only be reachable as client.v2.{resource}"
-        )
-    # This is still a v2 client. `client.v1` exists, and holds ONE thing:
-    # website incident acknowledgement, which uptimer 1.7.0 serves under
-    # /v1/rules because website monitoring is v1's resource (Decision 0015).
-    # Reading and writing monitors stays on client.v2.monitoring.websites.
-    assert isinstance(uptimer_client.v1, V1Endpoint)
-    assert isinstance(uptimer_client.v1.rules, RulesEndpoint)
-    for resource in V2_RESOURCES:
-        assert not hasattr(uptimer_client.v1, resource), (
-            f"v1.{resource} would make the version namespaces overlap"
-        )
+BASE = "http://uptimer.test/api"
+WS = f"{BASE}/v3/workspaces/w1"
 
 
-def test_v1_is_the_acknowledgement_door_and_nothing_else(uptimer_client: UptimerClient):
-    """
-    v1 wraps one route, addressed the way the API addresses it.
-
-    A rules listing or create here would rebuild the v1 client this SDK
-    deliberately does not have — those live on client.v2.monitoring.websites.
-    """
-    rules = uptimer_client.v1.rules
-    for method in ("all", "get", "create", "update", "delete"):
-        assert not hasattr(rules, method), f"v1.rules.{method} belongs to v2"
-
-    incident = rules("mon-1").incidents("inc-1")
-    assert incident.url == "http://127.0.0.1:2519/v1/rules/mon-1/incidents/inc-1"
-    assert hasattr(incident, "acknowledge")
+def ok(result: object, meta: dict[str, Any] | None = None) -> dict[str, Any]:
+    return {"result": result, "error": None, "meta": meta}
 
 
-def test_cloud_client_exposes_the_same_namespace():
-    client = UptimerCloudClient(api_key="test")
-    assert isinstance(client.v2, V2Endpoint)
-    assert client.v2.workspaces.url == "https://myuptime.info/api/v2/workspaces"
-    assert (
-        client.v2.monitoring.websites.url
-        == "https://myuptime.info/api/v2/monitoring/websites"
-    )
-    for resource in V2_RESOURCES:
-        assert not hasattr(client, resource)
+def refused(code: int, kind: str, message: str, details: dict[str, str] | None = None) -> dict[str, Any]:
+    return {"result": None, "error": {"code": code, "error_type": kind, "message": message, "details": details}, "meta": None}
 
 
-def test_custom_base_url_builds_v2_urls_onto_it():
-    client = UptimerClient(api_key="test", base_url="https://uptimer.example/api/")
-    assert client.v2.locations.url == "https://uptimer.example/api/v2/locations"
-    assert client.v2.incidents.url == "https://uptimer.example/api/v2/incidents"
+RESOURCE = {
+    "id": "r1", "key": "checkout", "name": "Checkout", "template": "website-check@1",
+    "meta": {"url": "https://acme.test"}, "created_at": "2026-10-04T10:00:00Z",
+    "open_incident": {"id": "i1", "standing": "problem", "explanation": "1 of 1 location failing"},
+    "signals": [{"id": "s1", "key": "reachability@loc", "kind": "heartbeat", "states": ["ok", "problem"]}],
+    "rules": [{"key": "availability", "signals": ["reachability@loc"], "status": "problem",
+               "explanation": "1 of 1 location failing", "since": "2026-10-04T10:01:00Z", "open_incident": "i1"}],
+    "maintenance": None,
+}
+
+INCIDENT = {
+    "id": "i1", "resource": {"id": "r1", "key": "checkout", "name": "Checkout"}, "rule": "availability",
+    "lifecycle": "closed", "confirmation": "unconfirmed", "condition": "ok", "verdict": "ok",
+    "explanation": "0 of 1 location failing", "closed_reason": "recovered",
+    "opened_at": "2026-10-04T10:00:00Z", "confirmed_at": None, "closed_at": "2026-10-04T10:02:00Z",
+    "effective_at": "2026-10-04T10:02:00Z", "acknowledgement": None,
+    "history": [
+        {"at": "2026-10-04T10:00:00Z", "kind": "opened", "condition": "problem", "verdict": "problem", "explanation": "1 of 1"},
+        {"at": "2026-10-04T10:02:00Z", "kind": "closed", "condition": "ok", "verdict": "ok", "explanation": "0 of 1"},
+    ],
+}
 
 
-def test_swapping_the_http_lib_rewires_the_namespace(
-    uptimer_client: UptimerClient,
-    base_url: str,
-):
-    # set_uptimer_http_lib rebuilds the namespace, so the endpoints under it
-    # must follow the new transport rather than keep the old one.
-    assert uptimer_client.v2.workspaces.url.startswith(base_url)
+@pytest.fixture
+def client() -> Iterator[UptimerClient]:
+    with UptimerClient(api_key="k3y", base_url=BASE + "/") as c:
+        yield c
 
 
-def test_version_is_unversioned(
-    uptimer_client: UptimerClient,
-    httpx_mock: HTTPXMock,
-    base_url: str,
-):
-    # /version is a shared global endpoint, so it works against any server —
-    # including one too old for the rest of this SDK.
-    expected_version = "1.5.0"
-    httpx_mock.add_response(json=api_response(expected_version))
-    assert uptimer_client.version() == expected_version
-    requested = str(httpx_mock.get_requests()[0].url)
-    assert requested == base_url + "/version"
-    assert "/v2/" not in requested
+def test_every_request_carries_the_key(client: UptimerClient, httpx_mock: HTTPXMock):
+    httpx_mock.add_response(url=f"{BASE}/v3/workspaces", json=ok([{"id": "w1", "name": "Ops", "role": "owner"}]))
+    spaces = client.workspaces()
+    assert spaces[0].id == "w1"
+    assert spaces[0].role == "owner"
+    assert httpx_mock.get_request().headers["Authorization"] == "Bearer k3y"
 
 
-def test_check_compatibility_stays_on_the_unversioned_endpoint(
-    uptimer_client: UptimerClient,
-    httpx_mock: HTTPXMock,
-    base_url: str,
-):
-    # A server this SDK speaks to. The bar is the SDK's own major.minor, so the
-    # version here follows the package rather than being pinned to whatever was
-    # current when the test was written.
-    httpx_mock.add_response(json=api_response(_supported_server_version()))
-    assert uptimer_client.check_compatibility() == _supported_server_version()
-    assert str(httpx_mock.get_requests()[0].url) == base_url + "/version"
+def test_a_resource_reads_with_its_signals_rules_and_result(client: UptimerClient, httpx_mock: HTTPXMock):
+    httpx_mock.add_response(url=f"{WS}/resources/checkout", json=ok(RESOURCE))
+    resource = client.workspace("w1").resources.get("checkout")
+    assert resource.id == "r1"
+    assert resource.signals[0].key == "reachability@loc"
+    assert resource.rules[0].status == "problem"
+    assert resource.rules[0].open_incident == "i1"
+    assert resource.open_incident is not None
+    assert resource.open_incident.id == "i1"
+    assert resource.created_at == datetime(2026, 10, 4, 10, 0, tzinfo=timezone.utc)
 
 
-def test_ensure_compatible_checks_once(
-    uptimer_client: UptimerClient,
-    httpx_mock: HTTPXMock,
-):
-    httpx_mock.add_response(json=api_response(_supported_server_version()))
-    uptimer_client.ensure_compatible()
-    uptimer_client.ensure_compatible()
-    assert len(httpx_mock.get_requests()) == 1
+def test_create_and_observe_send_what_the_api_reads(client: UptimerClient, httpx_mock: HTTPXMock):
+    httpx_mock.add_response(method="POST", url=f"{WS}/resources", json=ok(RESOURCE), status_code=201)
+    httpx_mock.add_response(method="POST", url=f"{WS}/resources/checkout/observations", status_code=202,
+                            json=ok({"resource": "r1", "signal": "s1", "observation": "o1", "created_signal": False}))
+    ws = client.workspace("w1")
+    ws.resources.create(template="website-check", name="Checkout", key="checkout", meta={"url": "https://acme.test"})
+    observed = ws.resources.observe("checkout", signal="reachability@loc", state="problem",
+                                    labels={"status": "503"}, observation_id="o1",
+                                    at=datetime(2026, 10, 4, 10, 0, tzinfo=timezone.utc))
+    assert observed.observation == "o1"
+    create, observe = httpx_mock.get_requests()
+    assert json.loads(create.content) == {"template": "website-check", "name": "Checkout",
+                                          "meta": {"url": "https://acme.test"}, "key": "checkout"}
+    assert json.loads(observe.content) == {"signal": "reachability@loc", "state": "problem",
+                                           "labels": {"status": "503"}, "id": "o1",
+                                           "at": "2026-10-04T10:00:00+00:00"}
 
 
-def _supported_server_version() -> str:
-    """
-    Return the oldest server this SDK accepts, as a version string.
-
-    Derived from MINIMUM_UPTIMER_VERSION rather than written down: that constant
-    is itself derived from the package version (Decision 0013), so a bump moves
-    both together. Hard-coding "1.5.0" here is what made these two tests fail
-    the moment the package became 1.6.
-    """
-    major, minor, patch = MINIMUM_UPTIMER_VERSION
-    return f"{major}.{minor}.{patch}"
+def test_an_incident_keeps_its_outcome_and_ordered_history(client: UptimerClient, httpx_mock: HTTPXMock):
+    httpx_mock.add_response(url=f"{WS}/incidents/i1", json=ok(INCIDENT))
+    incident = client.workspace("w1").incidents.get("i1")
+    assert (incident.lifecycle, incident.confirmation, incident.closed_reason) == ("closed", "unconfirmed", "recovered")
+    assert [t.kind for t in incident.history] == ["opened", "closed"]
+    assert incident.resource.key == "checkout"
+    assert incident.rule == "availability"
 
 
-def test_get_workspaces(
-    uptimer_client: UptimerClient,
-    httpx_mock: HTTPXMock,
-):
-    workspaces_result = [
-        {"id": "1", "name": "Workspace 1", "role": "admin", "kind": "workspace"},
-        {"id": "2", "name": "Workspace 2", "role": "user", "kind": "workspace"},
-    ]
-    httpx_mock.add_response(json=api_response(workspaces_result))
-    workspaces = uptimer_client.v2.workspaces.all()
-    assert len(workspaces) == len(workspaces_result)
-    for obj, expected in zip(workspaces, workspaces_result):
-        assert obj.id == expected["id"]
-        assert obj.name == expected["name"]
-        assert obj.role == expected["role"]
-        assert obj.kind == expected["kind"]
+def test_lists_page_with_the_cursor(client: UptimerClient, httpx_mock: HTTPXMock):
+    httpx_mock.add_response(url=f"{WS}/incidents?lifecycle=closed&limit=1", json=ok([INCIDENT], {"next_cursor": "i1"}))
+    httpx_mock.add_response(url=f"{WS}/incidents?lifecycle=closed&limit=1&cursor=i1", json=ok([], {"next_cursor": None}))
+    seen = list(client.workspace("w1").incidents.iterate(lifecycle="closed", limit=1))
+    assert [i.id for i in seen] == ["i1"]
+
+
+@pytest.mark.parametrize(("status", "body", "error"), [
+    (401, refused(1401, "auth", "no"), AuthenticationError),
+    (403, refused(1403, "forbidden", "viewer"), ForbiddenError),
+    (404, refused(1404, "not_found", "No such Incident"), NotFoundError),
+    (409, refused(1409, "conflict", "closed"), ConflictError),
+    (422, refused(1422, "validation", "Say a URL", {"field": "url"}), ValidationError),
+])
+def test_each_refusal_is_its_own_error(
+    client: UptimerClient, httpx_mock: HTTPXMock, status: int, body: dict[str, Any], error: type[Exception],
+) -> None:
+    httpx_mock.add_response(url=f"{WS}/incidents/i1", json=body, status_code=status)
+    with pytest.raises(error) as raised:
+        client.workspace("w1").incidents.get("i1")
+    assert getattr(raised.value, "code", None) == body["error"]["code"]
+    assert getattr(raised.value, "status", None) == status
+    if status == 422:
+        assert getattr(raised.value, "field", None) == "url"
+
+
+def test_a_server_without_api_v3_is_named(client: UptimerClient, httpx_mock: HTTPXMock):
+    httpx_mock.add_response(url=f"{BASE}/v3/version", json=ok({"version": "1.8.0", "api": "v2"}))
+    with pytest.raises(IncompatibleServerError):
+        client.check_compatibility()
+
+
+def test_a_v3_server_passes(client: UptimerClient, httpx_mock: HTTPXMock):
+    httpx_mock.add_response(url=f"{BASE}/v3/version", json=ok({"version": "2.0.0", "api": "v3"}))
+    assert client.check_compatibility() == "2.0.0"

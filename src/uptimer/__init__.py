@@ -1,12 +1,39 @@
 """
 Uptimer Python SDK.
 
-Targets Uptimer API v2 only. Code written against 0.4.x keeps working against
-the server — API v1 is unchanged and supported — but must stay on the 0.4.x SDK.
-
-The version tracks the uptimer release this SDK targets: 1.8.x speaks to
-uptimer 1.8.0 and later. Patch numbers are independent, so an SDK fix can ship
-without a server release. See product Decision 0013.
+Speaks Uptimer API v3, served by Uptimer 2.0 and later. The version tracks the
+server release it targets: 2.0.x speaks to Uptimer 2.0.0 and later.
 """
 
-__version__ = "1.8.0"
+__version__ = "2.0.0"
+
+from uptimer.client import UptimerClient
+from uptimer.errors import (
+    AuthenticationError,
+    BadRequestError,
+    ConflictError,
+    ForbiddenError,
+    IncompatibleServerError,
+    NotFoundError,
+    ServerError,
+    UnsupportedError,
+    UptimerApiError,
+    UptimerError,
+    ValidationError,
+)
+
+__all__ = [
+    "AuthenticationError",
+    "BadRequestError",
+    "ConflictError",
+    "ForbiddenError",
+    "IncompatibleServerError",
+    "NotFoundError",
+    "ServerError",
+    "UnsupportedError",
+    "UptimerApiError",
+    "UptimerClient",
+    "UptimerError",
+    "ValidationError",
+    "__version__",
+]

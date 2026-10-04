@@ -1,33 +1,18 @@
-# Uptimer Python SDK Examples
+# Uptimer Python SDK examples
 
-Minimal examples for the Uptimer Python SDK. Each one is a single operation, as
-short as it can be.
-
-API v2 resources are reached through `client.v2`, and its types are imported from
-`uptimer.models.v2` — the SDK keeps the API version visible because the API is
-versioned by path. `client.version()` and the compatibility helpers stay on the
-client itself, since `/version` is shared and unversioned.
-
-## The examples
-
-1. `01_client_setup.py` — create a client and confirm the server speaks API v2
-2. `02_list_workspaces.py` — `client.v2.workspaces.all()`
-3. `03_list_locations.py` — `client.v2.locations.all()`
-4. `04_create_website_monitor.py` — `client.v2.monitoring.websites.create(...)`
-5. `05_open_incidents.py` — `client.v2.incidents.all(workspace_id)`
-
-## Usage
-
-Replace the placeholders before running:
-
-- `your-api-key-here` — an API key from the dashboard (**User → API Keys**)
-- the `base_url` — `https://myuptime.info/api` for the hosted product, or your
-  own instance's URL plus `/api`
-
-## Running
+Each example is a complete script. Set two variables and run it:
 
 ```bash
-uv run python examples/01_client_setup.py
-uv run python examples/02_list_workspaces.py
-# ... and so on
+export UPTIMER_URL=http://127.0.0.1:8080/api   # your server, plus /api
+export UPTIMER_API_KEY=...                       # User → API keys
+python examples/01_quickstart.py
 ```
+
+1. `01_quickstart.py` — from an API key to an Incident: create a Resource from
+   the website Template, send it an Observation, read the Rule's result and
+   the Incident with its history.
+2. `02_large_fleet.py` — one website Resource per host from the same Template,
+   then every open Incident in the Workspace, page by page.
+
+The website Template needs at least one Location on the server
+(Server → Locations).

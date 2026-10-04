@@ -1,79 +1,252 @@
 from __future__ import annotations
 
-from typing import cast
+from typing import TYPE_CHECKING, Any, Iterator
 
-from uptimer.compat import ensure_v2_supported
-from uptimer.endpoints.v1 import V1Endpoint
-from uptimer.endpoints.v2 import V2Endpoint
+from uptimer.compat import ensure_supported
 from uptimer.http import UptimerHttpLib
+
+if TYPE_CHECKING:
+    import builtins
+    from datetime import datetime
+
+from uptimer.models import (
+    Incident,
+    Location,
+    Observation,
+    Observed,
+    Page,
+    Resource,
+    Template,
+    Workspace,
+)
 
 
 class UptimerClient:
     """
-    The Uptimer API client.
+    The Uptimer API v3 client.
 
-    Resources are reached through the API version that serves them:
-    `client.v2.workspaces`, `client.v2.locations`, `client.v2.incidents`,
-    `client.v2.monitoring.websites` and
-    `client.v2.subjects(subject).signals(signal).observations`.
+    `base_url` is the server's API root, such as `http://127.0.0.1:8080/api`.
+    The API key is a person's key (User → API keys); it reads and writes what
+    that person may in each Workspace.
 
-    This is a v2 client. `client.v1` exists for one thing only: uptimer 1.7.0
-    serves WEBSITE incident acknowledgement under `/v1/rules/...`, because
-    website monitoring is v1's resource and custom monitoring is v2's. Reading
-    and writing website monitors themselves stays on
-    `client.v2.monitoring.websites` — see the migration note in the README if
-    you are coming from 0.4.x.
-
-    `version()` and the compatibility helpers stay here rather than under a
-    version namespace, because `/version` is shared and unversioned.
+        client = UptimerClient(api_key="…", base_url="http://127.0.0.1:8080/api")
+        ws = client.workspace(client.workspaces()[0].id)
+        ws.resources.list()
     """
 
-    v1: V1Endpoint
-    v2: V2Endpoint
-
-    def __init__(self, api_key: str, base_url: str):
-        self._http_lib = UptimerHttpLib(api_key, base_url)
-        self._checked_compat = False
-        self._wire()
-
-    def _wire(self) -> None:
-        self.v1 = V1Endpoint(self._http_lib)
-        self.v2 = V2Endpoint(self._http_lib)
+    def __init__(self, api_key: str, base_url: str, *, timeout: float = 30.0):
+        self._http = UptimerHttpLib(api_key, base_url, timeout=timeout)
+        self._checked = False
 
     def version(self) -> str:
-        """
-        Return the server version.
-
-        `/version` is a shared global endpoint, not a versioned one, so this
-        works against any server — including one too old for the rest of this
-        SDK.
-        """
-        response = self._http_lib.client.get(self._http_lib.build_url("version"))
-        return cast("str", self._http_lib.parse_response(response=response))
+        """Return the server's version; needs no key."""
+        result, _ = self._http.request("GET", "v3/version")
+        return str(result["version"])
 
     def check_compatibility(self) -> str:
-        """
-        Verify the server provides API v2, and return its version.
-
-        Raises IncompatibleServerError if it does not. Called once per client
-        by ensure_compatible(); call it directly to fail fast at startup.
-        """
-        version = self.version()
-        ensure_v2_supported(version)
-        self._checked_compat = True
-        return version
+        """Raise IncompatibleServerError unless the server serves API v3; return its version."""
+        result, _ = self._http.request("GET", "v3/version")
+        ensure_supported(str(result.get("version", "")), result.get("api"))
+        self._checked = True
+        return str(result["version"])
 
     def ensure_compatible(self) -> None:
-        """Run the compatibility check once, then never again."""
-        if not self._checked_compat:
+        if not self._checked:
             self.check_compatibility()
 
-    def set_uptimer_http_lib(self, http_lib: UptimerHttpLib) -> None:
-        self._http_lib = http_lib
-        self._checked_compat = False
-        self._wire()
+    def workspaces(self) -> list[Workspace]:
+        """Return the Workspaces this key's owner belongs to, with their role in each."""
+        result, _ = self._http.request("GET", "v3/workspaces")
+        return [Workspace.from_api(one) for one in result]
+
+    def templates(self) -> list[Template]:
+        """Return the Templates this server publishes."""
+        result, _ = self._http.request("GET", "v3/templates")
+        return [Template.from_api(one) for one in result]
+
+    def locations(self) -> list[Location]:
+        """Return the Locations checks run from."""
+        result, _ = self._http.request("GET", "v3/locations")
+        return [Location.from_api(one) for one in result]
+
+    def workspace(self, workspace_id: str) -> WorkspaceClient:
+        """Resources and Incidents of one Workspace."""
+        return WorkspaceClient(self._http, workspace_id)
+
+    def close(self) -> None:
+        self._http.close()
+
+    def __enter__(self) -> UptimerClient:  # noqa: PYI034
+        """Use the client as a context manager; it closes its connections on exit."""
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        """Close the client's connections."""
+        self.close()
 
 
-class UptimerCloudClient(UptimerClient):
-    def __init__(self, api_key: str):
-        super().__init__(api_key, "https://myuptime.info/api")
+class WorkspaceClient:
+    def __init__(self, http: UptimerHttpLib, workspace_id: str):
+        self.id = workspace_id
+        base = f"v3/workspaces/{workspace_id}"
+        self.resources = ResourcesClient(http, base)
+        self.incidents = IncidentsClient(http, base)
+
+
+class ResourcesClient:
+    """A Workspace's Resources. `resource` arguments take a Resource's id or key."""
+
+    def __init__(self, http: UptimerHttpLib, base: str):
+        self._http = http
+        self._base = base
+
+    def list(self) -> list[Resource]:
+        result, _ = self._http.request("GET", f"{self._base}/resources")
+        return [Resource.from_api(one) for one in result]
+
+    def get(self, resource: str) -> Resource:
+        """One Resource with its Signals, its Rules and each Rule's latest result."""
+        result, _ = self._http.request("GET", f"{self._base}/resources/{resource}")
+        return Resource.from_api(result)
+
+    def create(
+        self,
+        *,
+        template: str,
+        name: str,
+        meta: dict[str, Any],
+        key: str | None = None,
+    ) -> Resource:
+        """Create a Resource from a published Template; `meta` answers its fields."""
+        body: dict[str, Any] = {"template": template, "name": name, "meta": meta}
+        if key is not None:
+            body["key"] = key
+        result, _ = self._http.request("POST", f"{self._base}/resources", json=body)
+        return Resource.from_api(result)
+
+    def update(
+        self,
+        resource: str,
+        *,
+        name: str | None = None,
+        meta: dict[str, Any] | None = None,
+    ) -> Resource:
+        """Change a Resource's name or answers; what is not given stays."""
+        body: dict[str, Any] = {}
+        if name is not None:
+            body["name"] = name
+        if meta is not None:
+            body["meta"] = meta
+        result, _ = self._http.request("PATCH", f"{self._base}/resources/{resource}", json=body)
+        return Resource.from_api(result)
+
+    def observe(  # noqa: PLR0913
+        self,
+        resource: str,
+        *,
+        signal: str,
+        state: str,
+        kind: str | None = None,
+        value: float | None = None,
+        labels: dict[str, str] | None = None,
+        body: dict[str, Any] | None = None,
+        at: datetime | None = None,
+        observation_id: str | None = None,
+    ) -> Observed:
+        """
+        Send one Observation (state `ok` or `problem`) on one of the Resource's Signals.
+
+        `kind` (heartbeat, event or periodic) is needed only to declare a new
+        Signal. The same `observation_id` sent twice is stored once.
+        """
+        optional = {"kind": kind, "value": value, "labels": labels, "body": body, "id": observation_id}
+        payload: dict[str, Any] = {
+            "signal": signal, "state": state,
+            **{name: item for name, item in optional.items() if item is not None},
+        }
+        if at is not None:
+            payload["at"] = at.isoformat()
+        result, _ = self._http.request("POST", f"{self._base}/resources/{resource}/observations", json=payload)
+        return Observed.from_api(result)
+
+    def observations(
+        self, resource: str, *, signal: str | None = None, limit: int = 50,
+    ) -> builtins.list[Observation]:
+        """Return the newest logged Observations, newest first."""
+        result, _ = self._http.request(
+            "GET", f"{self._base}/resources/{resource}/observations",
+            params={"signal": signal, "limit": limit},
+        )
+        return [Observation.from_api(one) for one in result]
+
+    def set_maintenance(self, resource: str, *, minutes: int) -> Resource:
+        """Hold this Resource's notifications for `minutes`; judging and history go on."""
+        result, _ = self._http.request(
+            "PUT", f"{self._base}/resources/{resource}/maintenance", json={"minutes": minutes},
+        )
+        return Resource.from_api(result)
+
+    def end_maintenance(self, resource: str) -> Resource:
+        result, _ = self._http.request("DELETE", f"{self._base}/resources/{resource}/maintenance")
+        return Resource.from_api(result)
+
+    def incidents(self, resource: str, **filters: Any) -> Page[Incident]:  # noqa: ANN401
+        """One Resource's Incidents; takes the filters of `IncidentsClient.list`."""
+        return _incident_page(self._http, f"{self._base}/resources/{resource}/incidents", filters)
+
+
+class IncidentsClient:
+    """A Workspace's Incidents, newest first."""
+
+    def __init__(self, http: UptimerHttpLib, base: str):
+        self._http = http
+        self._base = base
+
+    def list(  # noqa: PLR0913
+        self,
+        *,
+        resource: str | None = None,
+        rule: str | None = None,
+        lifecycle: str | None = None,
+        confirmation: str | None = None,
+        limit: int = 50,
+        cursor: str | None = None,
+    ) -> Page[Incident]:
+        """
+        One page of Incidents.
+
+        `lifecycle` is "open" or "closed", `confirmation` "confirmed" or
+        "unconfirmed". Pass the page's `next_cursor` as `cursor` for the next.
+        """
+        return _incident_page(self._http, f"{self._base}/incidents", {
+            "resource": resource, "rule": rule, "lifecycle": lifecycle,
+            "confirmation": confirmation, "limit": limit, "cursor": cursor,
+        })
+
+    def iterate(self, **filters: Any) -> Iterator[Incident]:  # noqa: ANN401
+        """Every Incident the filters match, page after page."""
+        cursor = None
+        while True:
+            page = self.list(**filters, cursor=cursor)
+            yield from page.items
+            if page.next_cursor is None:
+                return
+            cursor = page.next_cursor
+
+    def get(self, incident: str) -> Incident:
+        """One Incident with its ordered history."""
+        result, _ = self._http.request("GET", f"{self._base}/incidents/{incident}")
+        return Incident.from_api(result)
+
+    def acknowledge(self, incident: str) -> Incident:
+        """Take an open Incident on. A closed or already acknowledged one raises ConflictError."""
+        result, _ = self._http.request("POST", f"{self._base}/incidents/{incident}/acknowledge")
+        return Incident.from_api(result)
+
+
+def _incident_page(http: UptimerHttpLib, path: str, params: dict[str, Any]) -> Page[Incident]:
+    result, meta = http.request("GET", path, params=params)
+    return Page(
+        items=[Incident.from_api(one) for one in result],
+        next_cursor=(meta or {}).get("next_cursor"),
+    )

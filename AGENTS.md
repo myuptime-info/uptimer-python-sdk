@@ -25,8 +25,8 @@ task test      # pytest alone
 task build     # sdist + wheel into dist/
 ```
 
-- The package version tracks the Uptimer release it targets: 1.8.x speaks to
-  Uptimer 1.8.0 and later. `uptimer.__version__` is where the compatibility
+- The package version tracks the Uptimer release it targets: 2.0.x speaks to
+  API v3 on Uptimer 2.0.0 and later. `uptimer.__version__` is where the compatibility
   minimum comes from, and `cz` bumps it with `pyproject.toml`.
 - **Never publish a prerelease** (rc/a/b/dev) to TestPyPI or PyPI. This package
   ships final `X.Y.Z` only; publishing is an operator action.
