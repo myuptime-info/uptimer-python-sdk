@@ -236,6 +236,10 @@ class Transition:
     condition: str
     verdict: str
     explanation: str
+    # The bounded input evidence this transition recorded: {"inputs": [...],
+    # "omitted": n, "truncated": bool}. None where it recorded none (an
+    # administrative closure, or a server before 2.0 evidence).
+    evidence: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -290,6 +294,7 @@ class Incident:
                 Transition(
                     at=_required_time(h["at"]), kind=h["kind"], condition=h["condition"],
                     verdict=h["verdict"], explanation=h.get("explanation", ""),
+                    evidence=h.get("evidence"),
                 )
                 for h in data.get("history") or []
             ],

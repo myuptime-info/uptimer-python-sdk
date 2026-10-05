@@ -219,3 +219,14 @@ def test_incidents_filter_by_their_resources_fields(client: UptimerClient, httpx
         template="fleet-triage", resource_state="active", meta={"ratio_threshold": 0.4})
     assert page.items[0].id == "i1"
     assert page.next_cursor is None
+
+
+def test_a_transition_carries_its_recorded_evidence(client: UptimerClient, httpx_mock: HTTPXMock):
+    evidence = {"inputs": [{"signal": "traffic_ratio", "status": "ok", "value": 0.1, "at": "2026-10-05T12:00:00Z"},
+                           {"signal": "host_health", "unresolved": "the sender reported no_data"}],
+                "omitted": 0, "truncated": False}
+    history = [{**INCIDENT["history"][0], "evidence": evidence}, {**INCIDENT["history"][0], "kind": "closed"}]
+    httpx_mock.add_response(url=f"{WS}/incidents/i1", json=ok({**INCIDENT, "history": history}))
+    incident = client.workspace("w1").incidents.get("i1")
+    assert incident.history[0].evidence["inputs"][1]["unresolved"] == "the sender reported no_data"
+    assert incident.history[1].evidence is None
