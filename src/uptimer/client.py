@@ -124,9 +124,62 @@ class ResourcesClient:
         self._http = http
         self._base = base
 
-    def list(self) -> list[Resource]:
-        result, _ = self._http.request("GET", f"{self._base}/resources")
-        return [Resource.from_api(one) for one in result]
+    def list(
+        self,
+        *,
+        template: str | None = None,
+        state: str | None = None,
+        meta: dict[str, Any] | None = None,
+    ) -> builtins.list[Resource]:
+        """
+        Every Resource the filters match, page after page; active ones by default.
+
+        `state` is "active", "archived" or "all". `meta` filters by the named
+        Template's single-valued fields (equality), and needs `template`.
+        """
+        return [*self.iterate(template=template, state=state, meta=meta)]
+
+    def page(
+        self,
+        *,
+        template: str | None = None,
+        state: str | None = None,
+        meta: dict[str, Any] | None = None,
+        limit: int = 50,
+        cursor: str | None = None,
+    ) -> Page[Resource]:
+        """One page of Resources; pass its `next_cursor` as `cursor` for the next."""
+        params = _filters(template=template, state_name="state", state=state, meta=meta)
+        params.update({"limit": limit, "cursor": cursor})
+        result, info = self._http.request("GET", f"{self._base}/resources", params=params)
+        return Page(items=[Resource.from_api(one) for one in result],
+                    next_cursor=(info or {}).get("next_cursor"))
+
+    def iterate(
+        self,
+        *,
+        template: str | None = None,
+        state: str | None = None,
+        meta: dict[str, Any] | None = None,
+    ) -> Iterator[Resource]:
+        """Every matching Resource, page after page."""
+        cursor = None
+        while True:
+            page = self.page(template=template, state=state, meta=meta, limit=200, cursor=cursor)
+            yield from page.items
+            if page.next_cursor is None:
+                return
+            cursor = page.next_cursor
+
+    def archive(self, resource: str) -> Resource:
+        """
+        Retire a Resource from the inventory.
+
+        Its key stays reserved and its history readable; open Incidents close
+        as `resource_archived`. There is no restore.
+        """
+        result, _ = self._http.request("POST", f"{self._base}/resources/{resource}/archive")
+        return Resource.from_api(result)
 
     def get(self, resource: str) -> Resource:
         """One Resource with its Signals, its Rules and each Rule's latest result."""
@@ -235,17 +288,24 @@ class IncidentsClient:
         confirmation: str | None = None,
         limit: int = 50,
         cursor: str | None = None,
+        template: str | None = None,
+        resource_state: str | None = None,
+        meta: dict[str, Any] | None = None,
     ) -> Page[Incident]:
         """
         One page of Incidents.
 
         `lifecycle` is "open" or "closed", `confirmation` "confirmed" or
-        "unconfirmed". Pass the page's `next_cursor` as `cursor` for the next.
+        "unconfirmed". `template`, `resource_state` ("active", "archived" or
+        "all", the default) and `meta` keep the Incidents of matching
+        Resources. Pass the page's `next_cursor` as `cursor` for the next.
         """
-        return _incident_page(self._http, f"{self._base}/incidents", {
+        params = _filters(template=template, state_name="resource_state", state=resource_state, meta=meta)
+        params.update({
             "resource": resource, "rule": rule, "lifecycle": lifecycle,
             "confirmation": confirmation, "limit": limit, "cursor": cursor,
         })
+        return _incident_page(self._http, f"{self._base}/incidents", params)
 
     def iterate(self, **filters: Any) -> Iterator[Incident]:  # noqa: ANN401
         """Every Incident the filters match, page after page."""
@@ -266,6 +326,16 @@ class IncidentsClient:
         """Take an open Incident on. A closed or already acknowledged one raises ConflictError."""
         result, _ = self._http.request("POST", f"{self._base}/incidents/{incident}/acknowledge")
         return Incident.from_api(result)
+
+
+def _filters(
+    *, template: str | None, state_name: str, state: str | None, meta: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Turn the Resource filters into query parameters, `meta.<field>` for each field."""
+    params: dict[str, Any] = {"template": template, state_name: state}
+    for key, value in (meta or {}).items():
+        params[f"meta.{key}"] = str(value).lower() if isinstance(value, bool) else value
+    return params
 
 
 def _incident_page(http: UptimerHttpLib, path: str, params: dict[str, Any]) -> Page[Incident]:

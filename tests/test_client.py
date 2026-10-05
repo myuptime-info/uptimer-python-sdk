@@ -185,3 +185,37 @@ def test_rules_and_incidents_carry_their_action(client: UptimerClient, httpx_moc
     # An older server sends no action: still readable.
     httpx_mock.add_response(url=f"{WS}/incidents/i2", json=ok({**INCIDENT, "id": "i2"}))
     assert ws.incidents.get("i2").action is None
+
+
+def test_resources_are_listed_page_by_page_with_their_filters(client: UptimerClient, httpx_mock: HTTPXMock):
+    second = {**RESOURCE, "id": "r2", "key": "h2"}
+    httpx_mock.add_response(
+        url=f"{WS}/resources?template=fleet-triage&state=all&meta.provider=hetzner&meta.enabled=true&limit=200",
+        json=ok([RESOURCE], {"next_cursor": "r1"}))
+    httpx_mock.add_response(
+        url=f"{WS}/resources?template=fleet-triage&state=all&meta.provider=hetzner&meta.enabled=true&limit=200&cursor=r1",
+        json=ok([second], {"next_cursor": None}))
+    found = client.workspace("w1").resources.list(
+        template="fleet-triage", state="all", meta={"provider": "hetzner", "enabled": True})
+    assert [one.key for one in found] == ["checkout", "h2"]
+
+
+def test_archiving_answers_the_archived_resource(client: UptimerClient, httpx_mock: HTTPXMock):
+    httpx_mock.add_response(method="POST", url=f"{WS}/resources/checkout/archive",
+                            json=ok({**RESOURCE, "archived_at": "2026-10-05T12:00:00Z"}))
+    archived = client.workspace("w1").resources.archive("checkout")
+    assert archived.archived_at == datetime(2026, 10, 5, 12, 0, tzinfo=timezone.utc)
+    httpx_mock.add_response(method="POST", url=f"{WS}/resources/checkout/archive", status_code=409,
+                            json=refused(1409, "conflict", "This Resource is archived"))
+    with pytest.raises(ConflictError):
+        client.workspace("w1").resources.archive("checkout")
+
+
+def test_incidents_filter_by_their_resources_fields(client: UptimerClient, httpx_mock: HTTPXMock):
+    httpx_mock.add_response(
+        url=f"{WS}/incidents?template=fleet-triage&resource_state=active&meta.ratio_threshold=0.4&limit=50",
+        json=ok([INCIDENT], {"next_cursor": None}))
+    page = client.workspace("w1").incidents.list(
+        template="fleet-triage", resource_state="active", meta={"ratio_threshold": 0.4})
+    assert page.items[0].id == "i1"
+    assert page.next_cursor is None

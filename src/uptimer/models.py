@@ -140,6 +140,8 @@ class Resource:
     signals: list[Signal] = field(default_factory=list)
     rules: list[Rule] = field(default_factory=list)
     maintenance: Maintenance | None = None
+    # When it left the inventory, or None while it is active.
+    archived_at: datetime | None = None
 
     @classmethod
     def from_api(cls, data: dict[str, Any]) -> Resource:
@@ -168,6 +170,7 @@ class Resource:
             maintenance=Maintenance(
                 starts=_required_time(window["from"]), until=_required_time(window["until"]), by=window["by"],
             ) if window else None,
+            archived_at=_time(data.get("archived_at")),
         )
 
 
