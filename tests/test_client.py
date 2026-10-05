@@ -142,3 +142,46 @@ def test_a_server_without_api_v3_is_named(client: UptimerClient, httpx_mock: HTT
 def test_a_v3_server_passes(client: UptimerClient, httpx_mock: HTTPXMock):
     httpx_mock.add_response(url=f"{BASE}/v3/version", json=ok({"version": "2.0.0", "api": "v3"}))
     assert client.check_compatibility() == "2.0.0"
+
+
+COUNTED_TEMPLATE = {
+    "id": "fleet-triage@1", "key": "fleet-triage", "version": 1, "name": "Fleet server triage", "summary": "s",
+    "fields": [{"key": "ratio_threshold", "label": "Traffic ratio threshold", "help": "", "type": "number",
+                "required": False, "default": 0.5, "options": [], "min": 0, "max": None}],
+    "signals": [{"key": "traffic_ratio", "kind": "heartbeat", "states": ["ok", "problem", "no_data"]}],
+    "rules": [{"key": "banned", "signals": ["traffic_ratio"], "help": "", "action": "Replace the server."}],
+}
+
+
+def test_a_workspace_publishes_and_lists_its_templates(client: UptimerClient, httpx_mock: HTTPXMock):
+    manifest = {"key": "fleet-triage", "version": 1, "rules": [{"key": "banned", "decision": {
+        "not": {"signal": "traffic_ratio", "field": "value", "operator": "gte", "operand": 0.5,
+                "min_count": 3, "within_seconds": 900}}}]}
+    httpx_mock.add_response(method="POST", url=f"{WS}/templates", json=ok(COUNTED_TEMPLATE), status_code=201)
+    httpx_mock.add_response(method="GET", url=f"{WS}/templates", json=ok([COUNTED_TEMPLATE]))
+    ws = client.workspace("w1")
+
+    published = ws.templates.publish(manifest)
+    assert published.id == "fleet-triage@1"
+    assert published.rules[0]["action"] == "Replace the server."
+    assert json.loads(httpx_mock.get_requests()[0].content) == manifest
+    assert [one.id for one in ws.templates.list()] == ["fleet-triage@1"]
+
+
+def test_republishing_a_revision_is_a_conflict(client: UptimerClient, httpx_mock: HTTPXMock):
+    httpx_mock.add_response(method="POST", url=f"{WS}/templates", status_code=409,
+                            json=refused(1409, "conflict", "already published"))
+    with pytest.raises(ConflictError):
+        client.workspace("w1").templates.publish({"key": "fleet-triage", "version": 1})
+
+
+def test_rules_and_incidents_carry_their_action(client: UptimerClient, httpx_mock: HTTPXMock):
+    resource = {**RESOURCE, "rules": [{**RESOURCE["rules"][0], "action": "Replace the server."}]}
+    httpx_mock.add_response(url=f"{WS}/resources/checkout", json=ok(resource))
+    httpx_mock.add_response(url=f"{WS}/incidents/i1", json=ok({**INCIDENT, "action": "Replace the server."}))
+    ws = client.workspace("w1")
+    assert ws.resources.get("checkout").rules[0].action == "Replace the server."
+    assert ws.incidents.get("i1").action == "Replace the server."
+    # An older server sends no action: still readable.
+    httpx_mock.add_response(url=f"{WS}/incidents/i2", json=ok({**INCIDENT, "id": "i2"}))
+    assert ws.incidents.get("i2").action is None

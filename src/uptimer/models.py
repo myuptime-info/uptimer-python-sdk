@@ -110,6 +110,8 @@ class Rule:
     explanation: str | None
     since: datetime | None
     open_incident: str | None
+    # What this Rule's Incident tells a person to do, where its Template says.
+    action: str | None = None
 
 
 @dataclass(frozen=True)
@@ -159,7 +161,7 @@ class Resource:
                 Rule(
                     key=r["key"], signals=r.get("signals") or [], status=r.get("status"),
                     explanation=r.get("explanation"), since=_time(r.get("since")),
-                    open_incident=r.get("open_incident"),
+                    open_incident=r.get("open_incident"), action=r.get("action"),
                 )
                 for r in data.get("rules") or []
             ],
@@ -259,6 +261,8 @@ class Incident:
     effective_at: datetime
     acknowledgement: Acknowledgement | None
     history: list[Transition] = field(default_factory=list)
+    # What its Rule told a person to do when it opened, or None.
+    action: str | None = None
 
     @classmethod
     def from_api(cls, data: dict[str, Any]) -> Incident:
@@ -286,6 +290,7 @@ class Incident:
                 )
                 for h in data.get("history") or []
             ],
+            action=data.get("action"),
         )
 
 

@@ -89,8 +89,32 @@ class WorkspaceClient:
     def __init__(self, http: UptimerHttpLib, workspace_id: str):
         self.id = workspace_id
         base = f"v3/workspaces/{workspace_id}"
+        self.templates = TemplatesClient(http, base)
         self.resources = ResourcesClient(http, base)
         self.incidents = IncidentsClient(http, base)
+
+
+class TemplatesClient:
+    """The Templates a Workspace can create Resources from, and publishing its own."""
+
+    def __init__(self, http: UptimerHttpLib, base: str):
+        self._http = http
+        self._base = base
+
+    def list(self) -> list[Template]:
+        """System Templates, then this Workspace's own (id `key@version`), every revision."""
+        result, _ = self._http.request("GET", f"{self._base}/templates")
+        return [Template.from_api(one) for one in result]
+
+    def publish(self, manifest: dict[str, Any]) -> Template:
+        """
+        Publish a pushed-data Template revision (fields, signals, composite rules).
+
+        A revision never changes: the same key and version again raises
+        ConflictError; a definition Uptimer cannot judge raises ValidationError.
+        """
+        result, _ = self._http.request("POST", f"{self._base}/templates", json=manifest)
+        return Template.from_api(result)
 
 
 class ResourcesClient:
@@ -154,7 +178,7 @@ class ResourcesClient:
         observation_id: str | None = None,
     ) -> Observed:
         """
-        Send one Observation (state `ok` or `problem`) on one of the Resource's Signals.
+        Send one Observation (state `ok`, `problem` or `no_data`) on one of the Resource's Signals.
 
         `kind` (heartbeat, event or periodic) is needed only to declare a new
         Signal. The same `observation_id` sent twice is stored once.
