@@ -145,43 +145,43 @@ def test_a_v3_server_passes(client: UptimerClient, httpx_mock: HTTPXMock):
 
 
 COUNTED_TEMPLATE = {
-    "id": "fleet-triage@1", "key": "fleet-triage", "version": 1, "name": "Fleet server triage", "summary": "s",
-    "fields": [{"key": "ratio_threshold", "label": "Traffic ratio threshold", "help": "", "type": "number",
+    "id": "service-triage@1", "key": "service-triage", "version": 1, "name": "Synthetic service triage", "summary": "s",
+    "fields": [{"key": "load_threshold", "label": "Traffic ratio threshold", "help": "", "type": "number",
                 "required": False, "default": 0.5, "options": [], "min": 0, "max": None}],
-    "signals": [{"key": "traffic_ratio", "kind": "heartbeat", "states": ["ok", "problem", "no_data"]}],
-    "rules": [{"key": "banned", "signals": ["traffic_ratio"], "help": "", "action": "Replace the server."}],
+    "signals": [{"key": "load_ratio", "kind": "heartbeat", "states": ["ok", "problem", "no_data"]}],
+    "rules": [{"key": "access_loss", "signals": ["load_ratio"], "help": "", "action": "Investigate the access path."}],
 }
 
 
 def test_a_workspace_publishes_and_lists_its_templates(client: UptimerClient, httpx_mock: HTTPXMock):
-    manifest = {"key": "fleet-triage", "version": 1, "rules": [{"key": "banned", "decision": {
-        "not": {"signal": "traffic_ratio", "field": "value", "operator": "gte", "operand": 0.5,
+    manifest = {"key": "service-triage", "version": 1, "rules": [{"key": "access_loss", "decision": {
+        "not": {"signal": "load_ratio", "field": "value", "operator": "gte", "operand": 0.5,
                 "min_count": 3, "within_seconds": 900}}}]}
     httpx_mock.add_response(method="POST", url=f"{WS}/templates", json=ok(COUNTED_TEMPLATE), status_code=201)
     httpx_mock.add_response(method="GET", url=f"{WS}/templates", json=ok([COUNTED_TEMPLATE]))
     ws = client.workspace("w1")
 
     published = ws.templates.publish(manifest)
-    assert published.id == "fleet-triage@1"
-    assert published.rules[0]["action"] == "Replace the server."
+    assert published.id == "service-triage@1"
+    assert published.rules[0]["action"] == "Investigate the access path."
     assert json.loads(httpx_mock.get_requests()[0].content) == manifest
-    assert [one.id for one in ws.templates.list()] == ["fleet-triage@1"]
+    assert [one.id for one in ws.templates.list()] == ["service-triage@1"]
 
 
 def test_republishing_a_revision_is_a_conflict(client: UptimerClient, httpx_mock: HTTPXMock):
     httpx_mock.add_response(method="POST", url=f"{WS}/templates", status_code=409,
                             json=refused(1409, "conflict", "already published"))
     with pytest.raises(ConflictError):
-        client.workspace("w1").templates.publish({"key": "fleet-triage", "version": 1})
+        client.workspace("w1").templates.publish({"key": "service-triage", "version": 1})
 
 
 def test_rules_and_incidents_carry_their_action(client: UptimerClient, httpx_mock: HTTPXMock):
-    resource = {**RESOURCE, "rules": [{**RESOURCE["rules"][0], "action": "Replace the server."}]}
+    resource = {**RESOURCE, "rules": [{**RESOURCE["rules"][0], "action": "Investigate the access path."}]}
     httpx_mock.add_response(url=f"{WS}/resources/checkout", json=ok(resource))
-    httpx_mock.add_response(url=f"{WS}/incidents/i1", json=ok({**INCIDENT, "action": "Replace the server."}))
+    httpx_mock.add_response(url=f"{WS}/incidents/i1", json=ok({**INCIDENT, "action": "Investigate the access path."}))
     ws = client.workspace("w1")
-    assert ws.resources.get("checkout").rules[0].action == "Replace the server."
-    assert ws.incidents.get("i1").action == "Replace the server."
+    assert ws.resources.get("checkout").rules[0].action == "Investigate the access path."
+    assert ws.incidents.get("i1").action == "Investigate the access path."
     # An older server sends no action: still readable.
     httpx_mock.add_response(url=f"{WS}/incidents/i2", json=ok({**INCIDENT, "id": "i2"}))
     assert ws.incidents.get("i2").action is None
@@ -200,13 +200,13 @@ def test_a_rule_names_its_destination(client: UptimerClient, httpx_mock: HTTPXMo
 def test_resources_are_listed_page_by_page_with_their_filters(client: UptimerClient, httpx_mock: HTTPXMock):
     second = {**RESOURCE, "id": "r2", "key": "h2"}
     httpx_mock.add_response(
-        url=f"{WS}/resources?template=fleet-triage&state=all&meta.provider=hetzner&meta.enabled=true&limit=200",
+        url=f"{WS}/resources?template=service-triage&state=all&meta.provider=alpha&meta.enabled=true&limit=200",
         json=ok([RESOURCE], {"next_cursor": "r1"}))
     httpx_mock.add_response(
-        url=f"{WS}/resources?template=fleet-triage&state=all&meta.provider=hetzner&meta.enabled=true&limit=200&cursor=r1",
+        url=f"{WS}/resources?template=service-triage&state=all&meta.provider=alpha&meta.enabled=true&limit=200&cursor=r1",
         json=ok([second], {"next_cursor": None}))
     found = client.workspace("w1").resources.list(
-        template="fleet-triage", state="all", meta={"provider": "hetzner", "enabled": True})
+        template="service-triage", state="all", meta={"provider": "alpha", "enabled": True})
     assert [one.key for one in found] == ["checkout", "h2"]
 
 
@@ -223,20 +223,30 @@ def test_archiving_answers_the_archived_resource(client: UptimerClient, httpx_mo
 
 def test_incidents_filter_by_their_resources_fields(client: UptimerClient, httpx_mock: HTTPXMock):
     httpx_mock.add_response(
-        url=f"{WS}/incidents?template=fleet-triage&resource_state=active&meta.ratio_threshold=0.4&limit=50",
+        url=f"{WS}/incidents?template=service-triage&resource_state=active&meta.load_threshold=0.4&limit=50",
         json=ok([INCIDENT], {"next_cursor": None}))
     page = client.workspace("w1").incidents.list(
-        template="fleet-triage", resource_state="active", meta={"ratio_threshold": 0.4})
+        template="service-triage", resource_state="active", meta={"load_threshold": 0.4})
     assert page.items[0].id == "i1"
     assert page.next_cursor is None
 
 
 def test_a_transition_carries_its_recorded_evidence(client: UptimerClient, httpx_mock: HTTPXMock):
-    evidence = {"inputs": [{"signal": "traffic_ratio", "status": "ok", "value": 0.1, "at": "2026-10-05T12:00:00Z"},
-                           {"signal": "host_health", "unresolved": "the sender reported no_data"}],
+    evidence = {"inputs": [{"signal": "load_ratio", "status": "ok", "value": 0.1, "at": "2026-10-05T12:00:00Z"},
+                           {"signal": "service_health", "unresolved": "the sender reported no_data"}],
                 "omitted": 0, "truncated": False}
     history = [{**INCIDENT["history"][0], "evidence": evidence}, {**INCIDENT["history"][0], "kind": "closed"}]
     httpx_mock.add_response(url=f"{WS}/incidents/i1", json=ok({**INCIDENT, "history": history}))
     incident = client.workspace("w1").incidents.get("i1")
     assert incident.history[0].evidence["inputs"][1]["unresolved"] == "the sender reported no_data"
     assert incident.history[1].evidence is None
+
+
+def test_a_baseline_input_carries_the_median_it_read(client: UptimerClient, httpx_mock: HTTPXMock):
+    baseline = {"days": 7, "required": 12, "samples": 12, "median": 100}
+    evidence = {"inputs": [{"signal": "load", "status": "ok", "value": 40, "baseline": baseline}],
+                "omitted": 0, "truncated": False}
+    history = [{**INCIDENT["history"][0], "evidence": evidence}]
+    httpx_mock.add_response(url=f"{WS}/incidents/i1", json=ok({**INCIDENT, "history": history}))
+    incident = client.workspace("w1").incidents.get("i1")
+    assert incident.history[0].evidence["inputs"][0]["baseline"] == baseline

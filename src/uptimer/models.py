@@ -241,7 +241,9 @@ class Transition:
     verdict: str
     explanation: str
     # The bounded input evidence this transition recorded: {"inputs": [...],
-    # "omitted": n, "truncated": bool}. None where it recorded none (an
+    # "omitted": n, "truncated": bool}. An input may carry "counted" (a
+    # min_count set) or "baseline" ({days, required, samples, median}: the
+    # own-history median it compared with). None where it recorded none (an
     # administrative closure, or a server before 2.0 evidence).
     evidence: dict[str, Any] | None = None
 

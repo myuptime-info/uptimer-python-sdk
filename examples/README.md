@@ -15,7 +15,7 @@ python examples/01_quickstart.py
    then every open Incident in the Workspace, page by page.
 3. `03_field_triage_counted.py` — publish a workerless Template whose traffic
    comparison needs three distinct readings within fifteen minutes, push one
-   round (no verdict) and then two more (`banned` opens, with its action). Needs
+   round (no verdict) and then two more (`access_loss` opens, with its action). Needs
    a full key of a Workspace editor; no Location.
 
 The website Template needs at least one Location on the server
