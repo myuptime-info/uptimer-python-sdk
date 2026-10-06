@@ -187,6 +187,16 @@ def test_rules_and_incidents_carry_their_action(client: UptimerClient, httpx_moc
     assert ws.incidents.get("i2").action is None
 
 
+def test_a_rule_names_its_destination(client: UptimerClient, httpx_mock: HTTPXMock):
+    resource = {**RESOURCE, "rules": [{**RESOURCE["rules"][0], "destination": "d1"}]}
+    httpx_mock.add_response(url=f"{WS}/resources/checkout", json=ok(resource))
+    httpx_mock.add_response(url=f"{WS}/resources/checkout", json=ok(RESOURCE))
+    ws = client.workspace("w1")
+    assert ws.resources.get("checkout").rules[0].destination == "d1"
+    # A Rule without one, or an older server: None, the default routing.
+    assert ws.resources.get("checkout").rules[0].destination is None
+
+
 def test_resources_are_listed_page_by_page_with_their_filters(client: UptimerClient, httpx_mock: HTTPXMock):
     second = {**RESOURCE, "id": "r2", "key": "h2"}
     httpx_mock.add_response(

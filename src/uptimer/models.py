@@ -112,6 +112,9 @@ class Rule:
     open_incident: str | None
     # What this Rule's Incident tells a person to do, where its Template says.
     action: str | None = None
+    # The destination id this Rule's Incidents are announced to, where its
+    # Template names one; None follows the Resource's and the Workspace default.
+    destination: str | None = None
 
 
 @dataclass(frozen=True)
@@ -164,6 +167,7 @@ class Resource:
                     key=r["key"], signals=r.get("signals") or [], status=r.get("status"),
                     explanation=r.get("explanation"), since=_time(r.get("since")),
                     open_incident=r.get("open_incident"), action=r.get("action"),
+                    destination=r.get("destination"),
                 )
                 for r in data.get("rules") or []
             ],
