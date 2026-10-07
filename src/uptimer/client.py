@@ -181,6 +181,20 @@ class ResourcesClient:
                 return
             cursor = page.next_cursor
 
+    def rebind(self, resource: str, template: str, meta: dict[str, Any] | None = None) -> Resource:
+        """
+        Move an active pushed-data Resource to another published pushed-data Template.
+
+        `template` is a key (its newest revision) or "key@version"; `meta` answers its
+        fields. The Resource keeps its id and key; its old Rules' open Incidents close
+        as rule_removed and their history stays. A full key, editor or owner only.
+        """
+        body: dict[str, Any] = {"template": template}
+        if meta is not None:
+            body["meta"] = meta
+        result, _ = self._http.request("POST", f"{self._base}/resources/{resource}/rebind", json=body)
+        return Resource.from_api(result)
+
     def archive(self, resource: str) -> Resource:
         """
         Retire a Resource from the inventory.

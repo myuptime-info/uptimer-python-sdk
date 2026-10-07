@@ -64,6 +64,9 @@ resource = ws.resources.create(
 ws.resources.list()
 ws.resources.get("checkout-api")      # with signals, rules and each rule's latest result
 ws.resources.update("checkout-api", name="Checkout", meta={"confirm_after": 60})
+# A pushed-data Resource can move to another published pushed-data Template revision,
+# keeping its id and key; its old Rules' open Incidents close as rule_removed.
+ws.resources.rebind("srv-0042", "service-triage@4", meta={"provider": "alpha"})
 ```
 
 `resource.rules[i]` carries `status`, `explanation`, `since` and

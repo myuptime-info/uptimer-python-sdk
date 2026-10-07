@@ -274,6 +274,14 @@ def test_a_baseline_input_carries_the_median_it_read(client: UptimerClient, http
     assert incident.history[0].evidence["inputs"][0]["baseline"] == baseline
 
 
+def test_a_resource_rebinds_to_another_template(client: UptimerClient, httpx_mock: HTTPXMock):
+    httpx_mock.add_response(method="POST", url=f"{WS}/resources/checkout/rebind",
+                            json=ok({**RESOURCE, "template": "per-rule@2"}))
+    rebound = client.workspace("w1").resources.rebind("checkout", "per-rule@2", meta={"owner": "ops"})
+    assert rebound.key == RESOURCE["key"]
+    assert json.loads(httpx_mock.get_request().content) == {"template": "per-rule@2", "meta": {"owner": "ops"}}
+
+
 def test_incidents_filter_by_acknowledgement(client: UptimerClient, httpx_mock: HTTPXMock):
     httpx_mock.add_response(json=ok([INCIDENT]))
     httpx_mock.add_response(json=ok([]))
