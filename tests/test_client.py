@@ -293,3 +293,16 @@ def test_incidents_filter_by_acknowledgement(client: UptimerClient, httpx_mock: 
     assert first.url.params["rule"] == "banned"
     assert first.url.params["lifecycle"] == "open"
     assert second.url.params["acknowledged"] == "true"
+
+
+def test_an_observation_carries_a_reason(client: UptimerClient, httpx_mock: HTTPXMock):
+    httpx_mock.add_response(method="POST", url=f"{WS}/resources/srv-1/observations", status_code=202,
+                            json=ok({"resource": "r1", "signal": "a", "observation": "o1", "created_signal": False}))
+    httpx_mock.add_response(method="GET", json=ok([{"id": "o1", "signal": "a", "state": "problem", "value": None,
+                                                     "labels": {}, "reason": "connection refused",
+                                                     "at": "2026-10-07T10:00:00Z", "received_at": "2026-10-07T10:00:01Z",
+                                                     "source": "api"}]))
+    ws = client.workspace("w1")
+    ws.resources.observe("srv-1", signal="a", state="problem", reason="connection refused")
+    assert json.loads(httpx_mock.get_requests()[0].content)["reason"] == "connection refused"
+    assert ws.resources.observations("srv-1")[0].reason == "connection refused"

@@ -253,14 +253,18 @@ class ResourcesClient:
         body: dict[str, Any] | None = None,
         at: datetime | None = None,
         observation_id: str | None = None,
+        reason: str | None = None,
     ) -> Observed:
         """
         Send one Observation (state `ok`, `problem` or `no_data`) on one of the Resource's Signals.
 
         `kind` (heartbeat, event or periodic) is needed only to declare a new
-        Signal. The same `observation_id` sent twice is stored once.
+        Signal. The same `observation_id` sent twice is stored once. `reason`
+        is a short plain-text why, kept with the evidence and the alert of a
+        Rule that uses this reading; past 200 characters it is cut.
         """
-        optional = {"kind": kind, "value": value, "labels": labels, "body": body, "id": observation_id}
+        optional = {"kind": kind, "value": value, "labels": labels, "body": body, "id": observation_id,
+                    "reason": reason}
         payload: dict[str, Any] = {
             "signal": signal, "state": state,
             **{name: item for name, item in optional.items() if item is not None},

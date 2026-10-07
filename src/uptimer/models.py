@@ -208,6 +208,8 @@ class Observation:
     at: datetime
     received_at: datetime
     source: str
+    # The sender's short reason; "" when it gave none, or from an older server.
+    reason: str = ""
 
     @classmethod
     def from_api(cls, data: dict[str, Any]) -> Observation:
@@ -215,7 +217,7 @@ class Observation:
             id=data["id"], signal=data["signal"], location=data.get("location", ""),
             state=data["state"], value=data.get("value"), labels=data.get("labels") or {},
             at=_required_time(data["at"]), received_at=_required_time(data["received_at"]),
-            source=data.get("source", ""),
+            source=data.get("source", ""), reason=data.get("reason") or "",
         )
 
 
@@ -242,8 +244,9 @@ class Transition:
     explanation: str
     # The bounded input evidence this transition recorded: {"inputs": [...],
     # "omitted": n, "truncated": bool}. An input may carry "counted" (a
-    # min_count set) or "baseline" ({days, required, samples, median}: the
-    # own-history median it compared with). None where it recorded none (an
+    # min_count set), "baseline" ({days, required, samples, median}: the
+    # own-history median it compared with) or "reason" (what the sender said
+    # about that reading). None where it recorded none (an
     # administrative closure, or a server before 2.0 evidence).
     evidence: dict[str, Any] | None = None
 

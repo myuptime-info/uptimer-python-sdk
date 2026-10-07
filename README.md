@@ -76,7 +76,8 @@ ws.resources.rebind("srv-0042", "service-triage@4", meta={"provider": "alpha"})
 
 ```python
 ws.resources.observe("checkout-api", signal=resource.signals[0].key,
-                     state="problem", labels={"status": "503"})
+                     state="problem", labels={"status": "503"},
+                     reason="upstream answered 503")   # kept with the evidence and alert; cut at 200
 ws.resources.observations("checkout-api", limit=20)   # newest first
 ```
 
