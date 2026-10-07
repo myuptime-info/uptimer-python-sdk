@@ -301,12 +301,14 @@ class IncidentsClient:
         template: str | None = None,
         resource_state: str | None = None,
         meta: dict[str, Any] | None = None,
+        acknowledged: bool | None = None,
     ) -> Page[Incident]:
         """
         One page of Incidents.
 
         `lifecycle` is "open" or "closed", `confirmation` "confirmed" or
-        "unconfirmed". `template`, `resource_state` ("active", "archived" or
+        "unconfirmed". `acknowledged=False` with `lifecycle="open"` is what
+        still needs action; `acknowledged=True` is what somebody took on. `template`, `resource_state` ("active", "archived" or
         "all", the default) and `meta` keep the Incidents of matching
         Resources. Pass the page's `next_cursor` as `cursor` for the next.
         """
@@ -314,6 +316,7 @@ class IncidentsClient:
         params.update({
             "resource": resource, "rule": rule, "lifecycle": lifecycle,
             "confirmation": confirmation, "limit": limit, "cursor": cursor,
+            "acknowledged": None if acknowledged is None else ("true" if acknowledged else "false"),
         })
         return _incident_page(self._http, f"{self._base}/incidents", params)
 

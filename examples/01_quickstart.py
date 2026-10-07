@@ -4,13 +4,28 @@ read the Rule's result and the Incident it opened.
 
     UPTIMER_URL=http://127.0.0.1:8080/api UPTIMER_API_KEY=... python 01_quickstart.py
 
+A key that reaches more than one Workspace needs UPTIMER_WORKSPACE (its id or name).
+
 The server needs one Location (Server → Locations) for the website Template.
 """
 
 import os
+import sys
 import time
 
 from uptimer import NotFoundError, UptimerClient
+
+def chosen_workspace(client):
+    """The Workspace UPTIMER_WORKSPACE names (its id or name), or the only one this key reaches."""
+    want = os.environ.get("UPTIMER_WORKSPACE", "")
+    reachable = client.workspaces()
+    matching = [w for w in reachable if want in (w.id, w.name)] if want else reachable
+    if len(matching) != 1:
+        choices = ", ".join(f"{w.id} ({w.name})" for w in reachable)
+        problem = f"no single Workspace is called {want!r}" if want else f"this key reaches {len(reachable)} Workspaces"
+        sys.exit(f"{problem}; set UPTIMER_WORKSPACE to one of: {choices}")
+    return matching[0]
+
 
 client = UptimerClient(
     api_key=os.environ["UPTIMER_API_KEY"],
@@ -18,7 +33,7 @@ client = UptimerClient(
 )
 print("server", client.check_compatibility())
 
-workspace = client.workspaces()[0]
+workspace = chosen_workspace(client)
 ws = client.workspace(workspace.id)
 location = client.locations()[0]
 print(f"workspace {workspace.name} ({workspace.id}), location {location.name}")

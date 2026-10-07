@@ -88,6 +88,7 @@ page = ws.incidents.list(lifecycle="open", limit=50)        # newest first
 page.next_cursor                                            # None on the last page
 ws.incidents.list(resource="checkout-api", rule="availability",
                   lifecycle="closed", confirmation="unconfirmed")
+ws.incidents.list(lifecycle="open", acknowledged=False, rule="availability")  # what still needs action
 for incident in ws.incidents.iterate(lifecycle="open"):     # every page
     ...
 incident = ws.incidents.get(incident_id)                    # with ordered history

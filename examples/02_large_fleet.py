@@ -6,14 +6,27 @@ open Incident across the Workspace, page by page.
 """
 
 import os
+import sys
 
 from uptimer import UptimerClient, ValidationError
+
+def chosen_workspace(client):
+    """The Workspace UPTIMER_WORKSPACE names (its id or name), or the only one this key reaches."""
+    want = os.environ.get("UPTIMER_WORKSPACE", "")
+    reachable = client.workspaces()
+    matching = [w for w in reachable if want in (w.id, w.name)] if want else reachable
+    if len(matching) != 1:
+        choices = ", ".join(f"{w.id} ({w.name})" for w in reachable)
+        problem = f"no single Workspace is called {want!r}" if want else f"this key reaches {len(reachable)} Workspaces"
+        sys.exit(f"{problem}; set UPTIMER_WORKSPACE to one of: {choices}")
+    return client.workspace(matching[0].id)
+
 
 client = UptimerClient(
     api_key=os.environ["UPTIMER_API_KEY"],
     base_url=os.environ.get("UPTIMER_URL", "http://127.0.0.1:8080/api"),
 )
-ws = client.workspace(client.workspaces()[0].id)
+ws = chosen_workspace(client)
 locations = [location.id for location in client.locations()]
 
 hosts = [f"shop-{n:03d}.example.com" for n in range(1, 51)]

@@ -272,3 +272,16 @@ def test_a_baseline_input_carries_the_median_it_read(client: UptimerClient, http
     httpx_mock.add_response(url=f"{WS}/incidents/i1", json=ok({**INCIDENT, "history": history}))
     incident = client.workspace("w1").incidents.get("i1")
     assert incident.history[0].evidence["inputs"][0]["baseline"] == baseline
+
+
+def test_incidents_filter_by_acknowledgement(client: UptimerClient, httpx_mock: HTTPXMock):
+    httpx_mock.add_response(json=ok([INCIDENT]))
+    httpx_mock.add_response(json=ok([]))
+    ws = client.workspace("w1")
+    ws.incidents.list(lifecycle="open", rule="banned", acknowledged=False)
+    ws.incidents.list(acknowledged=True)
+    first, second = httpx_mock.get_requests()
+    assert first.url.params["acknowledged"] == "false"
+    assert first.url.params["rule"] == "banned"
+    assert first.url.params["lifecycle"] == "open"
+    assert second.url.params["acknowledged"] == "true"

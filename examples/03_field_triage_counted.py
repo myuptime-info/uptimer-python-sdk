@@ -12,6 +12,7 @@ and recovery waits apply after the count, as always.
 from __future__ import annotations
 
 import os
+import sys
 import time
 import uuid
 
@@ -67,9 +68,21 @@ def access_loss(ws, server: str):
     return rule, open_
 
 
+def chosen_workspace(client):
+    """The Workspace UPTIMER_WORKSPACE names (its id or name), or the only one this key reaches."""
+    want = os.environ.get("UPTIMER_WORKSPACE", "")
+    reachable = client.workspaces()
+    matching = [w for w in reachable if want in (w.id, w.name)] if want else reachable
+    if len(matching) != 1:
+        choices = ", ".join(f"{w.id} ({w.name})" for w in reachable)
+        problem = f"no single Workspace is called {want!r}" if want else f"this key reaches {len(reachable)} Workspaces"
+        sys.exit(f"{problem}; set UPTIMER_WORKSPACE to one of: {choices}")
+    return client.workspace(matching[0].id)
+
+
 client = UptimerClient(api_key=os.environ["UPTIMER_API_KEY"], base_url=os.environ["UPTIMER_URL"])
 client.check_compatibility()
-ws = client.workspace(client.workspaces()[0].id)
+ws = chosen_workspace(client)
 
 try:
     ws.templates.publish(MANIFEST)
