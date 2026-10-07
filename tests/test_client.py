@@ -68,6 +68,28 @@ def test_every_request_carries_the_key(client: UptimerClient, httpx_mock: HTTPXM
     assert httpx_mock.get_request().headers["Authorization"] == "Bearer k3y"
 
 
+def test_a_full_key_creates_a_workspace(client: UptimerClient, httpx_mock: HTTPXMock):
+    httpx_mock.add_response(method="POST", url=f"{BASE}/v3/workspaces", status_code=201,
+                            json=ok({"id": "w2", "name": "Field iteration 2", "role": "owner"}))
+    made = client.create_workspace("Field iteration 2")
+    assert (made.id, made.name, made.role) == ("w2", "Field iteration 2", "owner")
+    assert json.loads(httpx_mock.get_request().content) == {"name": "Field iteration 2"}
+
+
+def test_creating_a_workspace_is_refused_as_the_api_refuses_it(client: UptimerClient, httpx_mock: HTTPXMock):
+    httpx_mock.add_response(method="POST", url=f"{BASE}/v3/workspaces", status_code=422, json={
+        "result": None, "meta": None, "error": {"code": 1422, "error_type": "validation",
+        "message": "A Workspace needs a name of 1 to 60 characters.", "details": {"field": "name"}}})
+    with pytest.raises(ValidationError):
+        client.create_workspace(" ")
+    httpx_mock.add_response(method="POST", url=f"{BASE}/v3/workspaces", status_code=403, json={
+        "result": None, "meta": None, "error": {"code": 1403, "error_type": "forbidden",
+        "message": "This API key is scoped to one Workspace; creating a Workspace needs a full key.",
+        "details": {"scope": "full"}}})
+    with pytest.raises(ForbiddenError):
+        client.create_workspace("Elsewhere")
+
+
 def test_a_resource_reads_with_its_signals_rules_and_result(client: UptimerClient, httpx_mock: HTTPXMock):
     httpx_mock.add_response(url=f"{WS}/resources/checkout", json=ok(RESOURCE))
     resource = client.workspace("w1").resources.get("checkout")

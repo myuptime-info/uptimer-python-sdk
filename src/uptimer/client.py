@@ -59,6 +59,16 @@ class UptimerClient:
         result, _ = self._http.request("GET", "v3/workspaces")
         return [Workspace.from_api(one) for one in result]
 
+    def create_workspace(self, name: str) -> Workspace:
+        """
+        Create a Workspace the key's owner owns, and return it.
+
+        Only a full API key may: a scoped key raises ForbiddenError. A name
+        that is blank or longer than 60 characters raises ValidationError.
+        """
+        result, _ = self._http.request("POST", "v3/workspaces", json={"name": name})
+        return Workspace.from_api(result)
+
     def templates(self) -> list[Template]:
         """Return the Templates this server publishes."""
         result, _ = self._http.request("GET", "v3/templates")
