@@ -132,6 +132,13 @@ Every refusal raises a subclass of `UptimerApiError` with `code`,
 | `ValidationError` | 1422 | a field was refused; `.field` names it |
 | `ServerError` | 1500 | the server failed |
 
+### Server 2.0.0-rc5
+
+`resource.rules[i].routes` reads a Rule's notification routes (`Route(destination, on)`).
+Routes themselves are set in the Template manifest passed to
+`ws.templates.publish(manifest)`; no new client method is needed. Known
+predicates (rc4) and the `opened` webhook opt-in (UI) need none either.
+
 ## Examples
 
 See [`examples/`](examples/): from a key to an Incident, and a fleet from one
