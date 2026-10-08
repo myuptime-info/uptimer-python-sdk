@@ -101,6 +101,14 @@ class Signal:
 
 
 @dataclass(frozen=True)
+class Route:
+    """One destination a Rule routes to, and the transitions it receives."""
+
+    destination: str
+    on: list[str]
+
+
+@dataclass(frozen=True)
 class Rule:
     """A Rule and its latest result; `status` is None until it has decided."""
 
@@ -115,6 +123,9 @@ class Rule:
     # The destination id this Rule's Incidents are announced to, where its
     # Template names one; None follows the Resource's and the Workspace default.
     destination: str | None = None
+    # Where each transition goes, where its Template routes: [] sends nothing;
+    # None follows `destination`, then the Resource's and the Workspace default.
+    routes: list[Route] | None = None
 
 
 @dataclass(frozen=True)
@@ -168,6 +179,10 @@ class Resource:
                     explanation=r.get("explanation"), since=_time(r.get("since")),
                     open_incident=r.get("open_incident"), action=r.get("action"),
                     destination=r.get("destination"),
+                    routes=None if r.get("routes") is None else [
+                        Route(destination=route["destination"], on=route.get("on") or [])
+                        for route in r["routes"]
+                    ],
                 )
                 for r in data.get("rules") or []
             ],

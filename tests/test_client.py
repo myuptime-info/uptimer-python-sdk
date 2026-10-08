@@ -15,6 +15,7 @@ from uptimer import (
     UptimerClient,
     ValidationError,
 )
+from uptimer.models import Route
 
 if TYPE_CHECKING:
     from pytest_httpx import HTTPXMock
@@ -217,6 +218,18 @@ def test_a_rule_names_its_destination(client: UptimerClient, httpx_mock: HTTPXMo
     assert ws.resources.get("checkout").rules[0].destination == "d1"
     # A Rule without one, or an older server: None, the default routing.
     assert ws.resources.get("checkout").rules[0].destination is None
+
+
+def test_a_rule_reads_its_routes(client: UptimerClient, httpx_mock: HTTPXMock):
+    routed = {**RESOURCE["rules"][0], "routes": [{"destination": "d1", "on": ["opened", "problem"]}]}
+    silent = {**RESOURCE["rules"][0], "routes": []}
+    for rule in (routed, silent):
+        httpx_mock.add_response(url=f"{WS}/resources/checkout", json=ok({**RESOURCE, "rules": [rule]}))
+    httpx_mock.add_response(url=f"{WS}/resources/checkout", json=ok(RESOURCE))
+    ws = client.workspace("w1")
+    assert ws.resources.get("checkout").rules[0].routes == [Route(destination="d1", on=["opened", "problem"])]
+    assert ws.resources.get("checkout").rules[0].routes == []
+    assert ws.resources.get("checkout").rules[0].routes is None
 
 
 def test_resources_are_listed_page_by_page_with_their_filters(client: UptimerClient, httpx_mock: HTTPXMock):

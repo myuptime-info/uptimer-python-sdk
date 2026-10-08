@@ -70,7 +70,11 @@ ws.resources.rebind("srv-0042", "service-triage@4", meta={"provider": "alpha"})
 ```
 
 `resource.rules[i]` carries `status`, `explanation`, `since` and
-`open_incident` once the Rule has decided.
+`open_incident` once the Rule has decided. `routes` is where its Template
+sends each Incident transition (a list of `Route(destination, on)`; `[]`
+sends nothing), or `None` for a Rule that follows `destination`, then the
+Resource's and the Workspace default. Routes are set in the Template manifest
+you pass to `ws.templates.publish(manifest)`.
 
 ### Observations
 
