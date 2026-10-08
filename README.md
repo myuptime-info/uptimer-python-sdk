@@ -128,6 +128,12 @@ Every refusal raises a subclass of `UptimerApiError` with `code`,
 | `ValidationError` | 1422 | a field was refused; `.field` names it |
 | `ServerError` | 1500 | the server failed |
 
+### Server 2.0.0-rc4
+
+`ws.templates.publish(manifest)` sends the manifest as given, so a Rule using
+`known`, `all_known`, `any_known` or `min_known` needs no new client method. The `opened` webhook event is switched on per destination in the
+Uptimer UI; the client has nothing to call for it.
+
 ## Examples
 
 See [`examples/`](examples/): from a key to an Incident, and a fleet from one
