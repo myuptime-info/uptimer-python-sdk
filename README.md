@@ -117,6 +117,29 @@ ws.resources.set_maintenance("checkout-api", minutes=60)   # holds notifications
 ws.resources.end_maintenance("checkout-api")
 ```
 
+### Destinations
+
+A full API key manages where alerts go. A destination's URL is written, never
+read back.
+
+```python
+oncall = ws.destinations.create("oncall", type="slack", url="https://hooks.slack.com/services/…")
+ws.destinations.create("ops", type="webhook", url="https://ops.example/hook", send_on_open=True)
+ws.destinations.test(oncall.id)          # DestinationTest(status="delivered", reason=None)
+ws.destinations.update(oncall.id, enabled=False)
+page = ws.destinations.deliveries(oncall.id)   # event, status, reason code, incident
+```
+
+A Template Rule's routes may name a destination instead of its id; publishing
+resolves it in that Workspace, so one manifest works in several:
+
+```python
+"routes": [{"destination": {"name": "oncall"}, "on": ["opened", "problem", "recovery"]}]
+```
+
+`ws.destinations.delete(id)` raises `ValidationError` (`details["used_by"]`)
+while a live route still sends there.
+
 ### Errors
 
 Every refusal raises a subclass of `UptimerApiError` with `code`,

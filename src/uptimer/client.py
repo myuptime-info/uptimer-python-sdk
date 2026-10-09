@@ -10,6 +10,9 @@ if TYPE_CHECKING:
     from datetime import datetime
 
 from uptimer.models import (
+    Destination,
+    DestinationDelivery,
+    DestinationTest,
     Incident,
     Location,
     Observation,
@@ -102,6 +105,7 @@ class WorkspaceClient:
         self.templates = TemplatesClient(http, base)
         self.resources = ResourcesClient(http, base)
         self.incidents = IncidentsClient(http, base)
+        self.destinations = DestinationsClient(http, base)
 
 
 class TemplatesClient:
@@ -357,6 +361,90 @@ class IncidentsClient:
         """Take an open Incident on. A closed or already acknowledged one raises ConflictError."""
         result, _ = self._http.request("POST", f"{self._base}/incidents/{incident}/acknowledge")
         return Incident.from_api(result)
+
+
+class DestinationsClient:
+    """
+    A Workspace's alert destinations. Every call needs a full API key.
+
+    A destination's URL is written, never read back. Template routes may name
+    a destination `{"name": "oncall"}`; publishing resolves it in the Workspace.
+    """
+
+    def __init__(self, http: UptimerHttpLib, base: str):
+        self._http = http
+        self._base = f"{base}/destinations"
+
+    def list(self) -> list[Destination]:
+        """List this Workspace's destinations, by name."""
+        result, _ = self._http.request("GET", self._base)
+        return [Destination.from_api(one) for one in result]
+
+    def create(  # noqa: PLR0913
+        self,
+        name: str,
+        *,
+        type: str,  # noqa: A002
+        url: str,
+        channel: str | None = None,
+        enabled: bool | None = None,
+        send_on_open: bool | None = None,
+        default: bool | None = None,
+    ) -> Destination:
+        """
+        Add a `slack` or `webhook` destination. The first one becomes the default.
+
+        `send_on_open` is a webhook's opt-in to opening events. A taken name
+        raises ConflictError; a bad URL or type raises ValidationError.
+        """
+        body = _given(name=name, type=type, url=url, channel=channel, enabled=enabled,
+                      send_on_open=send_on_open, default=default)
+        result, _ = self._http.request("POST", self._base, json=body)
+        return Destination.from_api(result)
+
+    def update(  # noqa: PLR0913
+        self,
+        destination: str,
+        *,
+        name: str | None = None,
+        url: str | None = None,
+        channel: str | None = None,
+        enabled: bool | None = None,
+        send_on_open: bool | None = None,
+        default: bool | None = None,
+    ) -> Destination:
+        """Change what is given; the rest stays. `default=True` makes it the default."""
+        body = _given(name=name, url=url, channel=channel, enabled=enabled,
+                      send_on_open=send_on_open, default=default)
+        result, _ = self._http.request("PATCH", f"{self._base}/{destination}", json=body)
+        return Destination.from_api(result)
+
+    def delete(self, destination: str) -> None:
+        """
+        Delete a destination.
+
+        Raises ValidationError, whose `details["used_by"]` names them, while
+        the newest revision of a Template or an active Resource's Rule routes there.
+        """
+        self._http.request("DELETE", f"{self._base}/{destination}")
+
+    def test(self, destination: str) -> DestinationTest:
+        """Send the test message; answer delivered, or failed with a reason code."""
+        result, _ = self._http.request("POST", f"{self._base}/{destination}/test")
+        return DestinationTest(status=result["status"], reason=result.get("reason"))
+
+    def deliveries(self, destination: str, *, limit: int = 50, cursor: str | None = None) -> Page[DestinationDelivery]:
+        """One page of what was sent to it, newest first; pass `next_cursor` as `cursor`."""
+        result, info = self._http.request(
+            "GET", f"{self._base}/{destination}/deliveries", params={"limit": limit, "cursor": cursor},
+        )
+        return Page(items=[DestinationDelivery.from_api(one) for one in result],
+                    next_cursor=(info or {}).get("next_cursor"))
+
+
+def _given(**fields: Any) -> dict[str, Any]:  # noqa: ANN401
+    """Keep the fields that were given: None means leave it out."""
+    return {key: value for key, value in fields.items() if value is not None}
 
 
 def _filters(

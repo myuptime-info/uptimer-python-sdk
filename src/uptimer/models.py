@@ -327,6 +327,57 @@ class Incident:
 
 
 @dataclass(frozen=True)
+class Destination:
+    """A place a Workspace's alerts go. Its URL is never read back."""
+
+    id: str
+    name: str
+    type: str
+    channel: str | None
+    enabled: bool
+    send_on_open: bool
+    default: bool
+
+    @classmethod
+    def from_api(cls, data: dict[str, Any]) -> Destination:
+        return cls(
+            id=data["id"], name=data["name"], type=data["type"], channel=data.get("channel"),
+            enabled=data["enabled"], send_on_open=data.get("send_on_open", False), default=data.get("default", False),
+        )
+
+
+@dataclass(frozen=True)
+class DestinationTest:
+    """How a test message ended: `status` delivered or failed, and a reason code."""
+
+    status: str
+    reason: str | None
+
+    @property
+    def delivered(self) -> bool:
+        return self.status == "delivered"
+
+
+@dataclass(frozen=True)
+class DestinationDelivery:
+    """One thing sent to a destination: event, status and a reason code, never the payload."""
+
+    at: datetime
+    event: str
+    status: str
+    reason: str | None
+    # The Incident it was about; None for a test message.
+    incident: str | None
+
+    @classmethod
+    def from_api(cls, data: dict[str, Any]) -> DestinationDelivery:
+        return cls(
+            at=_required_time(data["at"]), event=data["event"], status=data["status"],
+            reason=data.get("reason"), incident=data.get("incident"),
+        )
+
+
+@dataclass(frozen=True)
 class Page(Generic[T]):
     """One page of a list, and the cursor for the next one (None at the end)."""
 

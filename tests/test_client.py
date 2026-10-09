@@ -319,3 +319,45 @@ def test_an_observation_carries_a_reason(client: UptimerClient, httpx_mock: HTTP
     ws.resources.observe("srv-1", signal="a", state="problem", reason="connection refused")
     assert json.loads(httpx_mock.get_requests()[0].content)["reason"] == "connection refused"
     assert ws.resources.observations("srv-1")[0].reason == "connection refused"
+
+
+DESTINATION = {"id": "d1", "name": "oncall", "type": "slack", "channel": None, "enabled": True,
+               "send_on_open": False, "default": True}
+
+
+def test_destinations_are_managed_without_reading_a_url(client: UptimerClient, httpx_mock: HTTPXMock):
+    httpx_mock.add_response(method="POST", url=f"{WS}/destinations", status_code=201, json=ok(DESTINATION))
+    httpx_mock.add_response(method="GET", url=f"{WS}/destinations", json=ok([DESTINATION]))
+    httpx_mock.add_response(method="PATCH", url=f"{WS}/destinations/d1", json=ok({**DESTINATION, "enabled": False}))
+    httpx_mock.add_response(method="POST", url=f"{WS}/destinations/d1/test", json=ok({"status": "failed", "reason": "http_403"}))
+    ws = client.workspace("w1")
+
+    made = ws.destinations.create("oncall", type="slack", url="https://hooks.example.test/secret")
+    assert made.default
+    assert made.type == "slack"
+    assert json.loads(httpx_mock.get_requests()[0].content) == {
+        "name": "oncall", "type": "slack", "url": "https://hooks.example.test/secret"}
+    assert [one.name for one in ws.destinations.list()] == ["oncall"]
+    assert not ws.destinations.update("d1", enabled=False).enabled
+    assert json.loads(httpx_mock.get_requests()[2].content) == {"enabled": False}
+    tested = ws.destinations.test("d1")
+    assert not tested.delivered
+    assert tested.reason == "http_403"
+
+
+def test_a_routed_destination_is_not_deleted(client: UptimerClient, httpx_mock: HTTPXMock):
+    httpx_mock.add_response(method="DELETE", url=f"{WS}/destinations/d1", status_code=422, json=refused(
+        1422, "validation", "Rules still route to this destination.",
+        {"field": "destination", "used_by": "Template paged@1 Rule host_down"}))
+    with pytest.raises(ValidationError) as refusal:
+        client.workspace("w1").destinations.delete("d1")
+    assert "paged@1" in refusal.value.details["used_by"]
+
+
+def test_a_destinations_deliveries_page(client: UptimerClient, httpx_mock: HTTPXMock):
+    row = {"at": "2026-10-09T10:00:00Z", "event": "problem", "status": "delivered", "reason": None, "incident": None}
+    httpx_mock.add_response(url=f"{WS}/destinations/d1/deliveries?limit=1", json=ok([row], {"next_cursor": "7"}))
+    page = client.workspace("w1").destinations.deliveries("d1", limit=1)
+    assert page.next_cursor == "7"
+    assert page.items[0].status == "delivered"
+    assert page.items[0].incident is None
