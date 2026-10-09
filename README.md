@@ -155,6 +155,13 @@ Every refusal raises a subclass of `UptimerApiError` with `code`,
 | `ValidationError` | 1422 | a field was refused; `.field` names it |
 | `ServerError` | 1500 | the server failed |
 
+### Server 2.0.0-rc6
+
+`ws.destinations` creates, lists, changes, tests and deletes destinations and
+pages each one's deliveries; a full API key is needed. A Template route may name
+a destination `{"name": "oncall"}`. `resource.rules[i].routes` (rc5) reads a
+Rule's routes.
+
 ## Examples
 
 See [`examples/`](examples/): from a key to an Incident, and a fleet from one
