@@ -155,7 +155,9 @@ Every refusal raises a subclass of `UptimerApiError` with `code`,
 | `ValidationError` | 1422 | a field was refused; `.field` names it |
 | `ServerError` | 1500 | the server failed |
 
-### Server 2.0.0-rc6
+### Server 2.0.0-rc6 and rc7
+
+rc7 is rc6 rebuilt on Go 1.26.9 (security fixes); the client is the same.
 
 `ws.destinations` creates, lists, changes, tests and deletes destinations and
 pages each one's deliveries; a full API key is needed. A Template route may name
