@@ -69,6 +69,29 @@ def test_every_request_carries_the_key(client: UptimerClient, httpx_mock: HTTPXM
     assert httpx_mock.get_request().headers["Authorization"] == "Bearer k3y"
 
 
+def test_a_signal_that_does_not_apply_reads_as_not_applicable(client: UptimerClient, httpx_mock: HTTPXMock):
+    node = {**RESOURCE, "signals": [
+        {"id": "s1", "key": "host", "kind": "heartbeat", "states": ["ok", "problem", "no_data"],
+         "applicability": "applicable"},
+        {"id": "s2", "key": "replication", "kind": "heartbeat", "states": ["ok", "problem", "no_data"],
+         "applicability": "not_applicable"},
+    ]}
+    httpx_mock.add_response(url=f"{WS}/resources/db-primary", json=ok(node))
+    signals = client.workspace("w1").resources.get("db-primary").signals
+    assert [(s.key, s.applicability, s.applicable) for s in signals] == [
+        ("host", "applicable", True), ("replication", "not_applicable", False)]
+
+
+def test_a_template_keeps_its_applies_if(client: UptimerClient, httpx_mock: HTTPXMock):
+    condition = {"field": "role", "operator": "eq", "value": "replica"}
+    httpx_mock.add_response(method="POST", url=f"{WS}/templates", status_code=201, json=ok({
+        "id": "db-node@1", "key": "db-node", "version": 1, "name": "Database node", "summary": "A node.",
+        "fields": [], "rules": [],
+        "signals": [{"key": "replication", "kind": "heartbeat", "states": ["ok"], "applies_if": condition}]}))
+    published = client.workspace("w1").templates.publish({"key": "db-node", "version": 1})
+    assert published.signals[0]["applies_if"] == condition
+
+
 def test_a_full_key_creates_a_workspace(client: UptimerClient, httpx_mock: HTTPXMock):
     httpx_mock.add_response(method="POST", url=f"{BASE}/v3/workspaces", status_code=201,
                             json=ok({"id": "w2", "name": "Field iteration 2", "role": "owner"}))

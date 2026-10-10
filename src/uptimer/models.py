@@ -98,6 +98,13 @@ class Signal:
     key: str
     kind: str
     states: list[str]
+    # "applicable", or "not_applicable" where the Template's `applies_if` is
+    # false for this Resource: no Rule reads it, and it is not missing data.
+    applicability: str = "applicable"
+
+    @property
+    def applicable(self) -> bool:
+        return self.applicability != "not_applicable"
 
 
 @dataclass(frozen=True)
@@ -173,7 +180,10 @@ class Resource:
             created_at=_required_time(data["created_at"]),
             open_incident=OpenIncident(**incident) if incident else None,
             signals=[
-                Signal(id=s["id"], key=s["key"], kind=s["kind"], states=s.get("states") or [])
+                Signal(
+                    id=s["id"], key=s["key"], kind=s["kind"], states=s.get("states") or [],
+                    applicability=s.get("applicability") or "applicable",
+                )
                 for s in data.get("signals") or []
             ],
             rules=[

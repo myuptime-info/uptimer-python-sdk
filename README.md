@@ -78,6 +78,17 @@ sends nothing), or `None` for a Rule that follows `destination`, then the
 Resource's and the Workspace default. Routes are set in the Template manifest
 you pass to `ws.templates.publish(manifest)`.
 
+`resource.signals[i].applicability` is `"applicable"`, or `"not_applicable"`
+where the Template's `applies_if` is false for this Resource (`.applicable`
+is the same as a bool). A Signal that does not apply is not missing data and
+not healthy evidence: no Rule reads it. A Signal applies only where its
+manifest condition holds:
+
+```python
+{"key": "replication", "kind": "heartbeat", "every_seconds": 300,
+ "applies_if": {"field": "role", "operator": "eq", "value": "replica"}}
+```
+
 ### Observations
 
 ```python
