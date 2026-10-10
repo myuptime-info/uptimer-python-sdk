@@ -86,8 +86,11 @@ is the same as a bool). A Signal that does not apply is not missing data and
 not healthy evidence: no Rule reads it. `resource.signals[i].missing` is why a
 Signal has no usable reading now — `"never_reported"`, `"stale"` (a heartbeat
 silent for more than three of its periods) or `"reported_no_data"` — or `None`
-where it has a current `ok` or `problem` reading, or does not apply. A Signal
-applies only where its manifest condition holds:
+where it has a current `ok` or `problem` reading, or does not apply.
+`resource.signals[i].on_demand` is a Signal checked only when asked, and
+`not_checked` is one nobody has asked for yet: it is not missing data and not
+`no_data`, so its `missing` is `None`. A Signal applies only where its
+manifest condition holds:
 
 ```python
 {"key": "replication", "kind": "heartbeat", "every_seconds": 300,

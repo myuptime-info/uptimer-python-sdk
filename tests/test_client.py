@@ -100,6 +100,19 @@ def test_a_missing_signal_says_why_and_the_list_filters_by_it(client: UptimerCli
     assert client.workspace("w1").resources.page(missing="never_reported").items == []
 
 
+def test_an_on_demand_signal_not_checked_yet_is_not_missing(client: UptimerClient, httpx_mock: HTTPXMock):
+    node = {**RESOURCE, "signals": [
+        {"id": "s1", "key": "deep", "kind": "event", "states": ["ok"], "applicability": "applicable",
+         "missing": None, "on_demand": True, "not_checked": True},
+        {"id": "s2", "key": "beat", "kind": "heartbeat", "states": ["ok"], "applicability": "applicable",
+         "missing": "reported_no_data", "on_demand": False, "not_checked": False},
+    ]}
+    httpx_mock.add_response(url=f"{WS}/resources/srv-0042", json=ok(node))
+    signals = client.workspace("w1").resources.get("srv-0042").signals
+    assert [(s.key, s.on_demand, s.not_checked, s.missing) for s in signals] == [
+        ("deep", True, True, None), ("beat", False, False, "reported_no_data")]
+
+
 def test_a_template_keeps_its_applies_if(client: UptimerClient, httpx_mock: HTTPXMock):
     condition = {"field": "role", "operator": "eq", "value": "replica"}
     httpx_mock.add_response(method="POST", url=f"{WS}/templates", status_code=201, json=ok({

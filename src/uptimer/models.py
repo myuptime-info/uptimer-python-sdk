@@ -104,6 +104,10 @@ class Signal:
     # Why it has no usable reading now: "never_reported", "stale" or
     # "reported_no_data"; None where it has one, or does not apply.
     missing: str | None = None
+    # An on-demand Signal is checked only when asked; `not_checked` is one
+    # nobody has asked for yet: not missing data, and not no_data.
+    on_demand: bool = False
+    not_checked: bool = False
 
     @property
     def applicable(self) -> bool:
@@ -187,6 +191,8 @@ class Resource:
                     id=s["id"], key=s["key"], kind=s["kind"], states=s.get("states") or [],
                     applicability=s.get("applicability") or "applicable",
                     missing=s.get("missing"),
+                    on_demand=bool(s.get("on_demand")),
+                    not_checked=bool(s.get("not_checked")),
                 )
                 for s in data.get("signals") or []
             ],
