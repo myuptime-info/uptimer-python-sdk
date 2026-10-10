@@ -82,6 +82,24 @@ def test_a_signal_that_does_not_apply_reads_as_not_applicable(client: UptimerCli
         ("host", "applicable", True), ("replication", "not_applicable", False)]
 
 
+def test_a_missing_signal_says_why_and_the_list_filters_by_it(client: UptimerClient, httpx_mock: HTTPXMock):
+    node = {**RESOURCE, "signals": [
+        {"id": "s1", "key": "beat", "kind": "heartbeat", "states": ["ok"], "applicability": "applicable",
+         "missing": "stale"},
+        {"id": "s2", "key": "load", "kind": "heartbeat", "states": ["ok"], "applicability": "applicable",
+         "missing": None},
+    ]}
+    httpx_mock.add_response(url=f"{WS}/resources/srv-0042", json=ok(node))
+    signals = client.workspace("w1").resources.get("srv-0042").signals
+    assert [(s.key, s.missing) for s in signals] == [("beat", "stale"), ("load", None)]
+
+    httpx_mock.add_response(url=f"{WS}/resources?limit=200&missing=stale%2Creported_no_data", json=ok([RESOURCE]))
+    found = client.workspace("w1").resources.list(missing=["stale", "reported_no_data"])
+    assert [r.key for r in found] == [RESOURCE["key"]]
+    httpx_mock.add_response(url=f"{WS}/resources?limit=50&missing=never_reported", json=ok([]))
+    assert client.workspace("w1").resources.page(missing="never_reported").items == []
+
+
 def test_a_template_keeps_its_applies_if(client: UptimerClient, httpx_mock: HTTPXMock):
     condition = {"field": "role", "operator": "eq", "value": "replica"}
     httpx_mock.add_response(method="POST", url=f"{WS}/templates", status_code=201, json=ok({

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Iterator
+from typing import TYPE_CHECKING, Any, Iterator, Sequence
 
 from uptimer.compat import ensure_supported
 from uptimer.http import UptimerHttpLib
@@ -149,15 +149,18 @@ class ResourcesClient:
         state: str | None = None,
         meta: dict[str, Any] | None = None,
         labels: dict[str, str] | None = None,
+        missing: str | Sequence[str] | None = None,
     ) -> builtins.list[Resource]:
         """
         Every Resource the filters match, page after page; active ones by default.
 
         `state` is "active", "archived" or "all". `meta` filters by the named
         Template's single-valued fields (equality), and needs `template`.
-        `labels` keeps Resources carrying each label exactly.
+        `labels` keeps Resources carrying each label exactly. `missing` keeps
+        Resources with a Signal that has no usable reading for this cause, or
+        any of these: "never_reported", "stale", "reported_no_data".
         """
-        return [*self.iterate(template=template, state=state, meta=meta, labels=labels)]
+        return [*self.iterate(template=template, state=state, meta=meta, labels=labels, missing=missing)]
 
     def page(  # noqa: PLR0913
         self,
@@ -166,12 +169,15 @@ class ResourcesClient:
         state: str | None = None,
         meta: dict[str, Any] | None = None,
         labels: dict[str, str] | None = None,
+        missing: str | Sequence[str] | None = None,
         limit: int = 50,
         cursor: str | None = None,
     ) -> Page[Resource]:
         """One page of Resources; pass its `next_cursor` as `cursor` for the next."""
         params = _filters(template=template, state_name="state", state=state, meta=meta, labels=labels)
         params.update({"limit": limit, "cursor": cursor})
+        if missing:
+            params["missing"] = missing if isinstance(missing, str) else ",".join(missing)
         result, info = self._http.request("GET", f"{self._base}/resources", params=params)
         return Page(items=[Resource.from_api(one) for one in result],
                     next_cursor=(info or {}).get("next_cursor"))
@@ -183,11 +189,13 @@ class ResourcesClient:
         state: str | None = None,
         meta: dict[str, Any] | None = None,
         labels: dict[str, str] | None = None,
+        missing: str | Sequence[str] | None = None,
     ) -> Iterator[Resource]:
         """Every matching Resource, page after page."""
         cursor = None
         while True:
-            page = self.page(template=template, state=state, meta=meta, labels=labels, limit=200, cursor=cursor)
+            page = self.page(template=template, state=state, meta=meta, labels=labels, missing=missing,
+                             limit=200, cursor=cursor)
             yield from page.items
             if page.next_cursor is None:
                 return

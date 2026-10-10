@@ -101,6 +101,9 @@ class Signal:
     # "applicable", or "not_applicable" where the Template's `applies_if` is
     # false for this Resource: no Rule reads it, and it is not missing data.
     applicability: str = "applicable"
+    # Why it has no usable reading now: "never_reported", "stale" or
+    # "reported_no_data"; None where it has one, or does not apply.
+    missing: str | None = None
 
     @property
     def applicable(self) -> bool:
@@ -183,6 +186,7 @@ class Resource:
                 Signal(
                     id=s["id"], key=s["key"], kind=s["kind"], states=s.get("states") or [],
                     applicability=s.get("applicability") or "applicable",
+                    missing=s.get("missing"),
                 )
                 for s in data.get("signals") or []
             ],

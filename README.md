@@ -66,6 +66,8 @@ ws.resources.get("checkout-api")      # with signals, rules and each rule's late
 ws.resources.update("checkout-api", name="Checkout", meta={"confirm_after": 60})
 ws.resources.update("checkout-api", labels={"env": "prod", "team": None})  # set env, remove team
 ws.resources.list(labels={"env": "prod"})   # also ws.incidents.list(labels=…)
+ws.resources.list(missing="stale")          # a Signal with no usable reading: never_reported, stale, reported_no_data
+ws.resources.list(missing=["never_reported", "stale"])
 # A pushed-data Resource can move to another published pushed-data Template revision,
 # keeping its id and key; its old Rules' open Incidents close as rule_removed.
 ws.resources.rebind("srv-0042", "service-triage@4", meta={"provider": "alpha"})
@@ -81,8 +83,11 @@ you pass to `ws.templates.publish(manifest)`.
 `resource.signals[i].applicability` is `"applicable"`, or `"not_applicable"`
 where the Template's `applies_if` is false for this Resource (`.applicable`
 is the same as a bool). A Signal that does not apply is not missing data and
-not healthy evidence: no Rule reads it. A Signal applies only where its
-manifest condition holds:
+not healthy evidence: no Rule reads it. `resource.signals[i].missing` is why a
+Signal has no usable reading now — `"never_reported"`, `"stale"` (a heartbeat
+silent for more than three of its periods) or `"reported_no_data"` — or `None`
+where it has a current `ok` or `problem` reading, or does not apply. A Signal
+applies only where its manifest condition holds:
 
 ```python
 {"key": "replication", "kind": "heartbeat", "every_seconds": 300,
