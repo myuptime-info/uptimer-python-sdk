@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from datetime import datetime
 
 from uptimer.models import (
+    BatchResult,
     Destination,
     DestinationDelivery,
     DestinationTest,
@@ -22,6 +23,9 @@ from uptimer.models import (
     Template,
     Workspace,
 )
+
+# MAX_BATCH is the most Observations one batch request carries.
+MAX_BATCH = 500
 
 
 class UptimerClient:
@@ -144,26 +148,29 @@ class ResourcesClient:
         template: str | None = None,
         state: str | None = None,
         meta: dict[str, Any] | None = None,
+        labels: dict[str, str] | None = None,
     ) -> builtins.list[Resource]:
         """
         Every Resource the filters match, page after page; active ones by default.
 
         `state` is "active", "archived" or "all". `meta` filters by the named
         Template's single-valued fields (equality), and needs `template`.
+        `labels` keeps Resources carrying each label exactly.
         """
-        return [*self.iterate(template=template, state=state, meta=meta)]
+        return [*self.iterate(template=template, state=state, meta=meta, labels=labels)]
 
-    def page(
+    def page(  # noqa: PLR0913
         self,
         *,
         template: str | None = None,
         state: str | None = None,
         meta: dict[str, Any] | None = None,
+        labels: dict[str, str] | None = None,
         limit: int = 50,
         cursor: str | None = None,
     ) -> Page[Resource]:
         """One page of Resources; pass its `next_cursor` as `cursor` for the next."""
-        params = _filters(template=template, state_name="state", state=state, meta=meta)
+        params = _filters(template=template, state_name="state", state=state, meta=meta, labels=labels)
         params.update({"limit": limit, "cursor": cursor})
         result, info = self._http.request("GET", f"{self._base}/resources", params=params)
         return Page(items=[Resource.from_api(one) for one in result],
@@ -175,11 +182,12 @@ class ResourcesClient:
         template: str | None = None,
         state: str | None = None,
         meta: dict[str, Any] | None = None,
+        labels: dict[str, str] | None = None,
     ) -> Iterator[Resource]:
         """Every matching Resource, page after page."""
         cursor = None
         while True:
-            page = self.page(template=template, state=state, meta=meta, limit=200, cursor=cursor)
+            page = self.page(template=template, state=state, meta=meta, labels=labels, limit=200, cursor=cursor)
             yield from page.items
             if page.next_cursor is None:
                 return
@@ -221,11 +229,14 @@ class ResourcesClient:
         name: str,
         meta: dict[str, Any],
         key: str | None = None,
+        labels: dict[str, str] | None = None,
     ) -> Resource:
         """Create a Resource from a published Template; `meta` answers its fields."""
         body: dict[str, Any] = {"template": template, "name": name, "meta": meta}
         if key is not None:
             body["key"] = key
+        if labels:
+            body["labels"] = labels
         result, _ = self._http.request("POST", f"{self._base}/resources", json=body)
         return Resource.from_api(result)
 
@@ -235,13 +246,23 @@ class ResourcesClient:
         *,
         name: str | None = None,
         meta: dict[str, Any] | None = None,
+        labels: dict[str, str | None] | None = None,
     ) -> Resource:
-        """Change a Resource's name or answers; what is not given stays."""
+        """
+        Change a Resource's name, answers or labels; what is not given stays.
+
+        In `labels`, a value sets that label and None removes it; labels not
+        named stay. Labels alone never change the Template or its revision.
+        A value is 1 to 128 characters with no leading or trailing spaces;
+        anything else raises ValidationError.
+        """
         body: dict[str, Any] = {}
         if name is not None:
             body["name"] = name
         if meta is not None:
             body["meta"] = meta
+        if labels is not None:
+            body["labels"] = labels
         result, _ = self._http.request("PATCH", f"{self._base}/resources/{resource}", json=body)
         return Resource.from_api(result)
 
@@ -277,6 +298,23 @@ class ResourcesClient:
             payload["at"] = at.isoformat()
         result, _ = self._http.request("POST", f"{self._base}/resources/{resource}/observations", json=payload)
         return Observed.from_api(result)
+
+    def observe_batch(self, items: builtins.list[dict[str, Any]]) -> BatchResult:
+        """
+        Send up to 500 Observations, for any Resources, in one request (1 MiB at most).
+
+        Each item is what `observe` sends plus `resource` (id or key):
+        `{"resource": "srv-0042", "signal": "origin", "state": "ok", "id": "…"}`.
+        Items are stored in order, each exactly as a single send would be; one
+        rejected item does not stop the others. Give each item an `id`: sending
+        the same batch again then stores nothing twice, so a partial failure is
+        retried by sending the batch (or its rejected items) again.
+        """
+        if not 1 <= len(items) <= MAX_BATCH:
+            message = f"a batch carries 1 to {MAX_BATCH} Observations; got {len(items)}"
+            raise ValueError(message)
+        result, _ = self._http.request("POST", f"{self._base}/observations", json={"observations": items})
+        return BatchResult.from_api(result)
 
     def observations(
         self, resource: str, *, signal: str | None = None, limit: int = 50,
@@ -324,6 +362,7 @@ class IncidentsClient:
         resource_state: str | None = None,
         meta: dict[str, Any] | None = None,
         acknowledged: bool | None = None,
+        labels: dict[str, str] | None = None,
     ) -> Page[Incident]:
         """
         One page of Incidents.
@@ -331,10 +370,11 @@ class IncidentsClient:
         `lifecycle` is "open" or "closed", `confirmation` "confirmed" or
         "unconfirmed". `acknowledged=False` with `lifecycle="open"` is what
         still needs action; `acknowledged=True` is what somebody took on. `template`, `resource_state` ("active", "archived" or
-        "all", the default) and `meta` keep the Incidents of matching
+        "all", the default), `meta` and `labels` keep the Incidents of matching
         Resources. Pass the page's `next_cursor` as `cursor` for the next.
         """
-        params = _filters(template=template, state_name="resource_state", state=resource_state, meta=meta)
+        params = _filters(template=template, state_name="resource_state", state=resource_state, meta=meta,
+                          labels=labels)
         params.update({
             "resource": resource, "rule": rule, "lifecycle": lifecycle,
             "confirmation": confirmation, "limit": limit, "cursor": cursor,
@@ -449,11 +489,14 @@ def _given(**fields: Any) -> dict[str, Any]:  # noqa: ANN401
 
 def _filters(
     *, template: str | None, state_name: str, state: str | None, meta: dict[str, Any] | None,
+    labels: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    """Turn the Resource filters into query parameters, `meta.<field>` for each field."""
+    """Turn the Resource filters into query parameters: `meta.<field>` and `label.<key>`."""
     params: dict[str, Any] = {"template": template, state_name: state}
     for key, value in (meta or {}).items():
         params[f"meta.{key}"] = str(value).lower() if isinstance(value, bool) else value
+    for key, label in (labels or {}).items():
+        params[f"label.{key}"] = label
     return params
 
 

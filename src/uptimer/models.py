@@ -156,6 +156,8 @@ class Resource:
     maintenance: Maintenance | None = None
     # When it left the inventory, or None while it is active.
     archived_at: datetime | None = None
+    # The Resource's own labels; not Template fields, and no Rule reads them.
+    labels: dict[str, str] = field(default_factory=dict)
 
     @classmethod
     def from_api(cls, data: dict[str, Any]) -> Resource:
@@ -167,6 +169,7 @@ class Resource:
             name=data["name"],
             template=data.get("template"),
             meta=data.get("meta") or {},
+            labels=data.get("labels") or {},
             created_at=_required_time(data["created_at"]),
             open_incident=OpenIncident(**incident) if incident else None,
             signals=[
@@ -374,6 +377,47 @@ class DestinationDelivery:
         return cls(
             at=_required_time(data["at"]), event=data["event"], status=data["status"],
             reason=data.get("reason"), incident=data.get("incident"),
+        )
+
+
+@dataclass(frozen=True)
+class BatchItem:
+    """One item of a batch: accepted with its identity, or rejected with the error a single send would raise."""
+
+    index: int
+    status: str
+    resource: str | None
+    signal: str | None
+    observation: str | None
+    created_signal: bool
+    # The API error as it came: {code, error_type, message, details}; None when accepted.
+    error: dict[str, Any] | None
+
+    @property
+    def accepted(self) -> bool:
+        return self.status == "accepted"
+
+
+@dataclass(frozen=True)
+class BatchResult:
+    """What one batch of Observations did, item by item, in the order sent."""
+
+    accepted: int
+    rejected: int
+    results: list[BatchItem]
+
+    @classmethod
+    def from_api(cls, data: dict[str, Any]) -> BatchResult:
+        return cls(
+            accepted=data["accepted"], rejected=data["rejected"],
+            results=[
+                BatchItem(
+                    index=one["index"], status=one["status"], resource=one.get("resource"),
+                    signal=one.get("signal"), observation=one.get("observation"),
+                    created_signal=one.get("created_signal", False), error=one.get("error"),
+                )
+                for one in data["results"]
+            ],
         )
 
 

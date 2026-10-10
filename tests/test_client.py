@@ -361,3 +361,48 @@ def test_a_destinations_deliveries_page(client: UptimerClient, httpx_mock: HTTPX
     assert page.next_cursor == "7"
     assert page.items[0].status == "delivered"
     assert page.items[0].incident is None
+
+
+def test_resource_labels_are_read_set_and_filtered(client: UptimerClient, httpx_mock: HTTPXMock):
+    labelled = {**RESOURCE, "labels": {"env": "prod"}}
+    httpx_mock.add_response(method="PATCH", url=f"{WS}/resources/checkout", json=ok(labelled))
+    httpx_mock.add_response(url=f"{WS}/resources?label.env=prod&limit=200", json=ok([labelled]))
+    httpx_mock.add_response(url=f"{WS}/incidents?label.env=prod&limit=50", json=ok([]))
+    ws = client.workspace("w1")
+
+    changed = ws.resources.update("checkout", labels={"env": "prod", "team": None})
+    assert changed.labels == {"env": "prod"}
+    assert json.loads(httpx_mock.get_requests()[0].content) == {"labels": {"env": "prod", "team": None}}
+    assert [one.labels for one in ws.resources.list(labels={"env": "prod"})] == [{"env": "prod"}]
+    assert ws.incidents.list(labels={"env": "prod"}).items == []
+
+
+def test_a_resource_without_labels_reads_none(client: UptimerClient, httpx_mock: HTTPXMock):
+    httpx_mock.add_response(url=f"{WS}/resources/checkout", json=ok(RESOURCE))
+    assert client.workspace("w1").resources.get("checkout").labels == {}
+
+
+def test_a_batch_answers_every_item(client: UptimerClient, httpx_mock: HTTPXMock):
+    answer = {"accepted": 1, "rejected": 1, "results": [
+        {"index": 0, "status": "accepted", "resource": "r1", "signal": "s1", "observation": "o-1", "error": None},
+        {"index": 1, "status": "rejected", "error": {"code": 1404, "error_type": "not_found",
+                                                     "message": "No such Resource in this Workspace.", "details": None}},
+    ]}
+    httpx_mock.add_response(method="POST", url=f"{WS}/observations", json=ok(answer))
+    items = [{"resource": "srv-1", "signal": "a", "state": "ok", "id": "o-1"},
+             {"resource": "nobody", "signal": "a", "state": "ok"}]
+    result = client.workspace("w1").resources.observe_batch(items)
+    assert json.loads(httpx_mock.get_requests()[0].content) == {"observations": items}
+    assert (result.accepted, result.rejected) == (1, 1)
+    assert result.results[0].accepted
+    assert result.results[0].observation == "o-1"
+    assert not result.results[1].accepted
+    assert result.results[1].error["code"] == 1404
+
+
+def test_a_batch_is_bounded_before_it_is_sent(client: UptimerClient):
+    ws = client.workspace("w1")
+    with pytest.raises(ValueError, match="1 to 500"):
+        ws.resources.observe_batch([])
+    with pytest.raises(ValueError, match="1 to 500"):
+        ws.resources.observe_batch([{"resource": "r", "signal": "a", "state": "ok"}] * 501)

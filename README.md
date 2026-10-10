@@ -64,6 +64,8 @@ resource = ws.resources.create(
 ws.resources.list()
 ws.resources.get("checkout-api")      # with signals, rules and each rule's latest result
 ws.resources.update("checkout-api", name="Checkout", meta={"confirm_after": 60})
+ws.resources.update("checkout-api", labels={"env": "prod", "team": None})  # set env, remove team
+ws.resources.list(labels={"env": "prod"})   # also ws.incidents.list(labels=…)
 # A pushed-data Resource can move to another published pushed-data Template revision,
 # keeping its id and key; its old Rules' open Incidents close as rule_removed.
 ws.resources.rebind("srv-0042", "service-triage@4", meta={"provider": "alpha"})
@@ -88,6 +90,20 @@ ws.resources.observations("checkout-api", limit=20)   # newest first
 `state` is `ok` or `problem`. The same `observation_id` sent twice is stored
 once. The observation log is investigation context, not a record of what a
 decision read.
+
+A fleet sends many at once: up to 500 Observations, for any Resources, per
+request. Each item is what `observe` sends plus `resource`; give each an `id`
+so a retry stores nothing twice.
+
+```python
+items = [{"resource": key, "signal": "origin", "state": "ok", "id": f"round-118-{key}"}
+         for key in fleet_keys]
+for start in range(0, len(items), 500):
+    result = ws.resources.observe_batch(items[start:start + 500])
+    for item in result.results:
+        if not item.accepted:
+            print(items[start + item.index]["resource"], item.error["message"])
+```
 
 ### Incidents
 
