@@ -171,6 +171,13 @@ Every refusal raises a subclass of `UptimerApiError` with `code`,
 | `ValidationError` | 1422 | a field was refused; `.field` names it |
 | `ServerError` | 1500 | the server failed |
 
+### Server 2.0.0-rc8
+
+New since rc7: `ws.resources.update(…, labels={…})` sets and removes a Resource's own
+labels, and `labels=` filters `ws.resources.list` and `ws.incidents.list`;
+`ws.resources.observe_batch(items)` sends up to 500 Observations, for any Resources,
+in one request. `ws.destinations` (rc6) is unchanged.
+
 ## Examples
 
 See [`examples/`](examples/): from a key to an Incident, and a fleet from one
