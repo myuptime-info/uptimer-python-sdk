@@ -21,10 +21,14 @@ from uptimer.errors import (
     UptimerError,
     ValidationError,
 )
+from uptimer.models import Comparison, Confirmer, ConfirmPolicy, meta
 
 __all__ = [
     "AuthenticationError",
     "BadRequestError",
+    "Comparison",
+    "ConfirmPolicy",
+    "Confirmer",
     "ConflictError",
     "ForbiddenError",
     "IncompatibleServerError",
@@ -36,4 +40,5 @@ __all__ = [
     "UptimerError",
     "ValidationError",
     "__version__",
+    "meta",
 ]

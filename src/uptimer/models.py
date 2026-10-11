@@ -81,6 +81,96 @@ class Template:
             rules=data.get("rules") or [],
         )
 
+    def confirm_policy(self, signal: str) -> ConfirmPolicy | None:
+        """Return the Confirmation policy of one of this Template's Signals, or None."""
+        for one in self.signals:
+            if one.get("key") == signal and one.get("confirm"):
+                return ConfirmPolicy.from_api(one["confirm"])
+        return None
+
+
+def meta(field: str) -> dict[str, str]:
+    """Return a Template value read from the Resource's own answer: ``{"meta": field}``."""
+    return {"meta": field}
+
+
+@dataclass(frozen=True)
+class Confirmer:
+    """
+    One second opinion in a Signal's Confirmation policy.
+
+    Exactly one of `probe` (a built-in probe: reachability, icmp, tcp, tls,
+    http, dns) or `exec` (a command name a worker's own commands file defines).
+    `with_` is its settings or parameters; a value may be ``meta("field")``.
+    The server checks every bound and answers ValidationError otherwise.
+    """
+
+    probe: str | None = None
+    exec: str | None = None
+    with_: dict[str, Any] = field(default_factory=dict)
+
+    def to_api(self) -> dict[str, Any]:
+        out: dict[str, Any] = {"probe": self.probe} if self.probe else {"exec": self.exec}
+        if self.with_:
+            out["with"] = dict(self.with_)
+        return out
+
+    @classmethod
+    def from_api(cls, data: dict[str, Any]) -> Confirmer:
+        return cls(probe=data.get("probe"), exec=data.get("exec"), with_=data.get("with") or {})
+
+
+@dataclass(frozen=True)
+class ConfirmPolicy:
+    """
+    A Signal's Confirmation policy, checked again by `by` before Rules believe a problem.
+
+    Only ``problem`` triggers one; a no_data reading is trusted as it is.
+    `refuted_if` is ``any_ok`` or ``all_ok``; `timeout` is 5 to 600 seconds.
+    Put ``policy.to_api()`` under a Template Signal's ``"confirm"`` key.
+    """
+
+    by: list[Confirmer]
+    refuted_if: str
+    timeout: int
+    on: str = "problem"
+
+    def to_api(self) -> dict[str, Any]:
+        return {"on": self.on, "by": [one.to_api() for one in self.by],
+                "refuted_if": self.refuted_if, "timeout": self.timeout}
+
+    @classmethod
+    def from_api(cls, data: dict[str, Any]) -> ConfirmPolicy:
+        return cls(by=[Confirmer.from_api(one) for one in data.get("by") or []],
+                   refuted_if=data["refuted_if"], timeout=data["timeout"], on=data.get("on") or "problem")
+
+
+@dataclass(frozen=True)
+class Comparison:
+    """
+    One comparison in a composite Rule's decision.
+
+    ``if_unknown=False`` makes it false, rather than unknown, when its Signal
+    has no usable data (never reported, silent, no_data, not checked yet);
+    only ``False`` is accepted, and not on ``known``, a group, or under ``not``.
+    """
+
+    signal: str
+    field: str
+    operator: str | None = None
+    operand: Any = None
+    if_unknown: bool | None = None
+
+    def to_api(self) -> dict[str, Any]:
+        out: dict[str, Any] = {"signal": self.signal, "field": self.field}
+        if self.operator is not None:
+            out["operator"] = self.operator
+        if self.operand is not None:
+            out["operand"] = self.operand
+        if self.if_unknown is not None:
+            out["if_unknown"] = self.if_unknown
+        return out
+
 
 @dataclass(frozen=True)
 class Location:
@@ -90,6 +180,31 @@ class Location:
     @classmethod
     def from_api(cls, data: dict[str, Any]) -> Location:
         return cls(id=data["id"], name=data["name"])
+
+
+@dataclass(frozen=True)
+class SignalConfirmation:
+    """
+    What a Signal's Confirmation policy made of its newest reading.
+
+    `status` is pending, confirmed, unconfirmed or not_run; `reason` is
+    refuted, problem_confirmed, timeout, confirmer_no_data, limited or
+    source_no_data (None while pending); `effective` is the state Rules
+    evaluate (ok where confirmers refuted the problem, else the original), and
+    `original` what the Signal first said. While pending, Rules hold.
+    """
+
+    status: str
+    reason: str | None
+    effective: str
+    original: str
+
+    @classmethod
+    def from_api(cls, data: dict[str, Any] | None) -> SignalConfirmation | None:
+        if not data:
+            return None
+        return cls(status=data["status"], reason=data.get("reason"), effective=data["effective"],
+                   original=data["original"])
 
 
 @dataclass(frozen=True)
@@ -108,6 +223,9 @@ class Signal:
     # nobody has asked for yet: not missing data, and not no_data.
     on_demand: bool = False
     not_checked: bool = False
+    # What its Confirmation policy made of its newest reading; None without a
+    # policy, or before a reading that needed one.
+    confirmation: SignalConfirmation | None = None
 
     @property
     def applicable(self) -> bool:
@@ -193,6 +311,7 @@ class Resource:
                     missing=s.get("missing"),
                     on_demand=bool(s.get("on_demand")),
                     not_checked=bool(s.get("not_checked")),
+                    confirmation=SignalConfirmation.from_api(s.get("confirmation")),
                 )
                 for s in data.get("signals") or []
             ],
@@ -234,6 +353,53 @@ class Observed:
 
 
 @dataclass(frozen=True)
+class ConfirmerReading:
+    """
+    One confirmer's part of a confirmation: a probe or a named command, and its reading.
+
+    `state` is None until it answers. No worker is named.
+    """
+
+    probe: str | None
+    exec: str | None
+    state: str | None
+    value: float | None
+    reason: str
+    at: datetime | None
+
+    @classmethod
+    def from_api(cls, data: dict[str, Any]) -> ConfirmerReading:
+        return cls(probe=data.get("probe"), exec=data.get("exec"), state=data.get("state"),
+                   value=data.get("value"), reason=data.get("reason") or "", at=_time(data.get("at")))
+
+
+@dataclass(frozen=True)
+class ObservationConfirmation:
+    """
+    What an Observation's Confirmation policy made of it, kept beside the original reading.
+
+    The outcome, the state Rules evaluate, and each confirmer's reading.
+    """
+
+    status: str
+    reason: str | None
+    effective: str
+    refuted_if: str
+    deadline: datetime
+    decided_at: datetime | None
+    confirmers: list[ConfirmerReading]
+
+    @classmethod
+    def from_api(cls, data: dict[str, Any] | None) -> ObservationConfirmation | None:
+        if not data:
+            return None
+        return cls(status=data["status"], reason=data.get("reason"), effective=data["effective"],
+                   refuted_if=data.get("refuted_if", ""), deadline=_required_time(data["deadline"]),
+                   decided_at=_time(data.get("decided_at")),
+                   confirmers=[ConfirmerReading.from_api(one) for one in data.get("confirmers") or []])
+
+
+@dataclass(frozen=True)
 class Observation:
     """One logged Observation: investigation context, not a decision record."""
 
@@ -248,6 +414,9 @@ class Observation:
     source: str
     # The sender's short reason; "" when it gave none, or from an older server.
     reason: str = ""
+    # What its Signal's Confirmation policy made of it; None without a policy.
+    # `state` above stays the original reading.
+    confirmation: ObservationConfirmation | None = None
 
     @classmethod
     def from_api(cls, data: dict[str, Any]) -> Observation:
@@ -256,6 +425,7 @@ class Observation:
             state=data["state"], value=data.get("value"), labels=data.get("labels") or {},
             at=_required_time(data["at"]), received_at=_required_time(data["received_at"]),
             source=data.get("source", ""), reason=data.get("reason") or "",
+            confirmation=ObservationConfirmation.from_api(data.get("confirmation")),
         )
 
 
@@ -274,6 +444,43 @@ class Acknowledgement:
 
 
 @dataclass(frozen=True)
+class EvidenceConfirmation:
+    """A recorded reading's confirmation: status, reason code and the original state."""
+
+    status: str
+    reason: str | None
+    original: str
+
+
+@dataclass(frozen=True)
+class EvidenceInput:
+    """
+    One input of a Transition's recorded evidence, as the Rule read it.
+
+    `status` is the state the Rule evaluated; where a Confirmation decided the
+    reading, `confirmation.original` is what the Signal first said.
+    """
+
+    signal: str
+    where: str
+    status: str | None
+    value: float | None
+    at: datetime | None
+    reason: str
+    unresolved: str
+    confirmation: EvidenceConfirmation | None
+
+    @classmethod
+    def from_api(cls, data: dict[str, Any]) -> EvidenceInput:
+        said = data.get("confirmation")
+        return cls(signal=data["signal"], where=data.get("where", ""), status=data.get("status"),
+                   value=data.get("value"), at=_time(data.get("at")), reason=data.get("reason") or "",
+                   unresolved=data.get("unresolved") or "",
+                   confirmation=EvidenceConfirmation(status=said["status"], reason=said.get("reason"),
+                                                     original=said["original"]) if said else None)
+
+
+@dataclass(frozen=True)
 class Transition:
     at: datetime
     kind: str
@@ -287,6 +494,13 @@ class Transition:
     # about that reading). None where it recorded none (an
     # administrative closure, or a server before 2.0 evidence).
     evidence: dict[str, Any] | None = None
+
+    @property
+    def inputs(self) -> list[EvidenceInput]:
+        """The recorded evidence's inputs, typed; [] where none was recorded."""
+        if not self.evidence:
+            return []
+        return [EvidenceInput.from_api(one) for one in self.evidence.get("inputs") or []]
 
 
 @dataclass(frozen=True)

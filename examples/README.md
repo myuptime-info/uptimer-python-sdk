@@ -21,6 +21,13 @@ writes anything and lists the Workspaces to choose from.
    comparison needs three distinct readings within fifteen minutes, push one
    round (no verdict) and then two more (`access_loss` opens, with its action). Needs
    a full key of a Workspace editor; no Location.
+4. `04_confirmations.py` — publish a synthetic replica Template with a
+   confirmed port Signal, an on-demand check read with `if_unknown: false`, and
+   a Signal that `applies_if` the role is replica; create a primary and a
+   replica, push a problem, and read each Signal's applicability, missing
+   cause, `not_checked` and confirmation. Running the probe needs an Uptimer
+   worker; without one the confirmation stays `pending`, and `unconfirmed` /
+   `timeout` after 30 seconds. Needs a full key of a Workspace editor.
 
 The website Template needs at least one Location on the server
 (Server → Locations).

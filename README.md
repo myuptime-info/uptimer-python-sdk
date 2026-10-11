@@ -97,6 +97,62 @@ manifest condition holds:
  "applies_if": {"field": "role", "operator": "eq", "value": "replica"}}
 ```
 
+### Confirmations
+
+A Template Signal can ask for a second opinion before its `problem` is
+believed. `ConfirmPolicy` writes that `"confirm"` policy, `Confirmer` one
+confirmer (a built-in probe or a command name the worker defines), and `meta`
+a value read from the Resource's own field. `Comparison` writes one
+comparison of a composite Rule; `if_unknown=False` makes it false, rather than
+unknown, when its Signal has no usable data (never reported, silent,
+`no_data`, or an on-demand Signal not checked yet).
+
+```python
+from uptimer import Comparison, Confirmer, ConfirmPolicy, meta
+
+policy = ConfirmPolicy(
+    by=[Confirmer(probe="tcp", with_={"host": meta("host"), "port": 5432}),
+        Confirmer(exec="check-replica", with_={"host": meta("host")})],
+    refuted_if="any_ok",   # any ok refutes; "all_ok" needs every confirmer ok
+    timeout=30,            # seconds, 5 to 600
+)
+manifest = {"key": "replica", "version": 1, "name": "Replica", "summary": "A replica.",
+            "fields": [{"key": "host", "label": "Host", "type": "string"}],
+            "signals": [{"key": "port", "kind": "event", "confirm": policy.to_api()},
+                        {"key": "deep", "kind": "event", "on_demand": True}],
+            "rules": [{"key": "down", "action": "Look at the replica.",
+                       "wait": {"confirm_after": 0, "recover_after": 0},
+                       "decision": {"any": [Comparison("port", "status", "eq", "problem").to_api(),
+                                            Comparison("deep", "status", "eq", "problem",
+                                                       if_unknown=False).to_api()]}}]}
+template = ws.templates.publish(manifest)
+template.confirm_policy("port")          # the same ConfirmPolicy, read back
+```
+
+Only a `problem` reading is confirmed; a `no_data` one is trusted as it is.
+While a reading is being confirmed, Rules on that Signal hold. What was
+decided reads back in three places. `status` is `pending`, `confirmed`,
+`unconfirmed` or `not_run`. `reason` is `refuted`, `problem_confirmed`,
+`timeout`, `confirmer_no_data`, `limited` or `source_no_data`. A refuted
+problem reads `ok`; every other outcome keeps the original.
+
+```python
+signal = ws.resources.get("db-1").signals[0]
+signal.confirmation        # SignalConfirmation(status, reason, effective, original), or None
+
+row = ws.resources.observations("db-1", signal="port")[0]
+row.state                  # the original reading, always
+row.confirmation           # ObservationConfirmation: status, reason, effective, refuted_if,
+                           # deadline, decided_at, and confirmers (probe or exec, state, value, reason, at)
+
+incident = ws.incidents.get(incident_id)
+for one in incident.history[0].inputs:   # the evidence a transition recorded, typed
+    one.status, one.confirmation         # what the Rule read; EvidenceConfirmation(status, reason, original)
+```
+
+An Incident's own `confirmation` (`confirmed` once its Rule's `confirm_after`
+has passed) is a different thing from a Signal's Confirmation.
+
 ### Observations
 
 ```python
@@ -192,5 +248,6 @@ Every refusal raises a subclass of `UptimerApiError` with `code`,
 
 ## Examples
 
-See [`examples/`](examples/): from a key to an Incident, and a fleet from one
-Template.
+See [`examples/`](examples/): from a key to an Incident, a fleet from one
+Template, a counted comparison, and Confirmations with on-demand and
+`applies_if` Signals and missing-Signal causes.
