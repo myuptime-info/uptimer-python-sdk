@@ -70,7 +70,10 @@ ws.resources.list(missing="stale")          # a Signal with no usable reading: n
 ws.resources.list(missing=["never_reported", "stale"])
 # A pushed-data Resource can move to another published pushed-data Template revision,
 # keeping its id and key; its old Rules' open Incidents close as rule_removed.
+# A Signal that keeps its key and kind keeps its history (baselines carry on);
+# reset_history starts named Signals fresh when their meaning changed.
 ws.resources.rebind("srv-0042", "service-triage@4", meta={"provider": "alpha"})
+ws.resources.rebind("srv-0042", "service-triage@5", reset_history=["load"])
 ```
 
 `resource.rules[i]` carries `status`, `explanation`, `since` and

@@ -349,6 +349,21 @@ def test_a_resource_rebinds_to_another_template(client: UptimerClient, httpx_moc
     assert json.loads(httpx_mock.get_request().content) == {"template": "per-rule@2", "meta": {"owner": "ops"}}
 
 
+def test_a_rebind_can_reset_a_signals_history(client: UptimerClient, httpx_mock: HTTPXMock):
+    httpx_mock.add_response(method="POST", url=f"{WS}/resources/checkout/rebind",
+                            json=ok({**RESOURCE, "template": "per-rule@2"}))
+    client.workspace("w1").resources.rebind("checkout", "per-rule@2", reset_history=["load"])
+    assert json.loads(httpx_mock.get_request().content) == {"template": "per-rule@2", "reset_history": ["load"]}
+
+
+def test_a_rebind_with_an_unknown_reset_key_is_refused(client: UptimerClient, httpx_mock: HTTPXMock):
+    httpx_mock.add_response(method="POST", url=f"{WS}/resources/checkout/rebind", status_code=422,
+                            json=refused(1422, "validation", "The new Template has no Signal called lod.",
+                                        {"field": "reset_history"}))
+    with pytest.raises(ValidationError):
+        client.workspace("w1").resources.rebind("checkout", "per-rule@2", reset_history=["lod"])
+
+
 def test_incidents_filter_by_acknowledgement(client: UptimerClient, httpx_mock: HTTPXMock):
     httpx_mock.add_response(json=ok([INCIDENT]))
     httpx_mock.add_response(json=ok([]))

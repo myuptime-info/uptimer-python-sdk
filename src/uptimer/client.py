@@ -201,17 +201,23 @@ class ResourcesClient:
                 return
             cursor = page.next_cursor
 
-    def rebind(self, resource: str, template: str, meta: dict[str, Any] | None = None) -> Resource:
+    def rebind(self, resource: str, template: str, meta: dict[str, Any] | None = None,
+               reset_history: Sequence[str] | None = None) -> Resource:
         """
         Move an active pushed-data Resource to another published pushed-data Template.
 
         `template` is a key (its newest revision) or "key@version"; `meta` answers its
         fields. The Resource keeps its id and key; its old Rules' open Incidents close
-        as rule_removed and their history stays. A full key, editor or owner only.
+        as rule_removed and their history stays. A Signal that keeps its key and kind
+        keeps its readings, so baselines and counted windows carry on; `reset_history`
+        names the new Template's Signal keys whose meaning changed, to start them fresh
+        (an unknown key is a ValidationError). A full key, editor or owner only.
         """
         body: dict[str, Any] = {"template": template}
         if meta is not None:
             body["meta"] = meta
+        if reset_history is not None:
+            body["reset_history"] = list(reset_history)
         result, _ = self._http.request("POST", f"{self._base}/resources/{resource}/rebind", json=body)
         return Resource.from_api(result)
 
