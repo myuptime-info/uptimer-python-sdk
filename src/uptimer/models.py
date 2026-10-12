@@ -88,6 +88,20 @@ class Template:
                 return ConfirmPolicy.from_api(one["confirm"])
         return None
 
+    def valid_seconds(self, signal: str) -> int:
+        """Return how long an on-demand Signal's reading stays current; 0 means for ever."""
+        for one in self.signals:
+            if one.get("key") == signal:
+                return int(one.get("valid_seconds") or 0)
+        return 0
+
+    def reset_signals(self, rule: str) -> list[str]:
+        """Return the Signal keys a Rule's recovery resets (its ``on_recovery``); [] where it names none."""
+        for one in self.rules:
+            if one.get("key") == rule:
+                return list((one.get("on_recovery") or {}).get("reset_signals") or [])
+        return []
+
 
 def meta(field: str) -> dict[str, str]:
     """Return a Template value read from the Resource's own answer: ``{"meta": field}``."""
@@ -153,6 +167,9 @@ class Comparison:
     ``if_unknown=False`` makes it false, rather than unknown, when its Signal
     has no usable data (never reported, silent, no_data, not checked yet);
     only ``False`` is accepted, and not on ``known``, a group, or under ``not``.
+
+    ``Comparison("port", "confirmation", "eq", "refuted")`` reads the outcome of
+    a Signal's Confirmation policy (``eq`` or ``neq`` only).
     """
 
     signal: str
@@ -208,6 +225,46 @@ class SignalConfirmation:
 
 
 @dataclass(frozen=True)
+class Worker:
+    """
+    A registered worker. `location` is None for one without a Location.
+
+    `next_step` is only set by registering: the command to run on the control
+    plane before the worker can connect. No secret is returned.
+    """
+
+    id: str
+    uid: str
+    name: str
+    location: Location | None
+    tags: list[str]
+    active: bool
+    next_step: str | None = None
+
+    @classmethod
+    def from_api(cls, data: dict[str, Any]) -> Worker:
+        place = data.get("location")
+        return cls(id=data["id"], uid=data["uid"], name=data["name"],
+                   location=Location.from_api(place) if place else None,
+                   tags=data.get("tags") or [], active=bool(data.get("active")),
+                   next_step=data.get("next_step") or None)
+
+
+@dataclass(frozen=True)
+class SignalReset:
+    """When a Rule's recovery reset a Signal's current reading, and which Rule."""
+
+    at: datetime
+    rule: str
+
+    @classmethod
+    def from_api(cls, data: dict[str, Any] | None) -> SignalReset | None:
+        if not data:
+            return None
+        return cls(at=_required_time(data["at"]), rule=data["rule"])
+
+
+@dataclass(frozen=True)
 class Signal:
     id: str
     key: str
@@ -226,6 +283,9 @@ class Signal:
     # What its Confirmation policy made of its newest reading; None without a
     # policy, or before a reading that needed one.
     confirmation: SignalConfirmation | None = None
+    # Set while its newest reading is one a Rule's recovery reset: comparisons
+    # on it are unknown until a newer reading arrives. None otherwise.
+    reset: SignalReset | None = None
 
     @property
     def applicable(self) -> bool:
@@ -312,6 +372,7 @@ class Resource:
                     on_demand=bool(s.get("on_demand")),
                     not_checked=bool(s.get("not_checked")),
                     confirmation=SignalConfirmation.from_api(s.get("confirmation")),
+                    reset=SignalReset.from_api(s.get("reset")),
                 )
                 for s in data.get("signals") or []
             ],
@@ -379,6 +440,8 @@ class ObservationConfirmation:
     What an Observation's Confirmation policy made of it, kept beside the original reading.
 
     The outcome, the state Rules evaluate, and each confirmer's reading.
+    `shared` is True where this reading joined another reading's confirmation
+    of the same Signal instead of asking again.
     """
 
     status: str
@@ -388,6 +451,7 @@ class ObservationConfirmation:
     deadline: datetime
     decided_at: datetime | None
     confirmers: list[ConfirmerReading]
+    shared: bool = False
 
     @classmethod
     def from_api(cls, data: dict[str, Any] | None) -> ObservationConfirmation | None:
@@ -396,7 +460,8 @@ class ObservationConfirmation:
         return cls(status=data["status"], reason=data.get("reason"), effective=data["effective"],
                    refuted_if=data.get("refuted_if", ""), deadline=_required_time(data["deadline"]),
                    decided_at=_time(data.get("decided_at")),
-                   confirmers=[ConfirmerReading.from_api(one) for one in data.get("confirmers") or []])
+                   confirmers=[ConfirmerReading.from_api(one) for one in data.get("confirmers") or []],
+                   shared=bool(data.get("shared")))
 
 
 @dataclass(frozen=True)

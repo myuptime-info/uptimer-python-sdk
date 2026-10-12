@@ -48,6 +48,19 @@ client.locations()    # [Location(id, name)]
 ws = client.workspace("<workspace id>")
 ```
 
+Server administrators with a full key can also add Locations and register
+workers (anyone else gets `ForbiddenError`):
+
+```python
+edge = client.create_location("edge-a")   # Location; an existing name returns that Location
+worker = client.register_worker(name="worker-01", uid="00000000-0000-4000-8000-000000000001",
+                                location=edge.id, tags=["linux"])
+worker.next_step     # the `uptimer worker-cert ...` command to run on the control plane
+client.workers()     # [Worker(id, uid, name, location, tags, active)]
+```
+
+A uid already registered raises `ConflictError`.
+
 ### Resources
 
 A Resource is addressed by its `id` or by its `key`.
@@ -92,8 +105,14 @@ silent for more than three of its periods) or `"reported_no_data"` — or `None`
 where it has a current `ok` or `problem` reading, or does not apply.
 `resource.signals[i].on_demand` is a Signal checked only when asked, and
 `not_checked` is one nobody has asked for yet: it is not missing data and not
-`no_data`, so its `missing` is `None`. A Signal applies only where its
-manifest condition holds:
+`no_data`, so its `missing` is `None`. An on-demand Signal with
+`"valid_seconds": 600` in its manifest goes back to `not_checked` once its
+reading is older than that (`template.valid_seconds("deep")` reads it back).
+`resource.signals[i].reset` is `SignalReset(at, rule)` while the Signal's
+newest reading is one a Rule's recovery reset (the Rule's
+`"on_recovery": {"reset_signals": ["load"]}`, read back with
+`template.reset_signals("outage")`), and `None` otherwise. A Signal applies
+only where its manifest condition holds:
 
 ```python
 {"key": "replication", "kind": "heartbeat", "every_seconds": 300,
@@ -130,6 +149,7 @@ manifest = {"key": "replica", "version": 1, "name": "Replica", "summary": "A rep
                                                        if_unknown=False).to_api()]}}]}
 template = ws.templates.publish(manifest)
 template.confirm_policy("port")          # the same ConfirmPolicy, read back
+Comparison("port", "confirmation", "eq", "refuted")   # a Rule on the outcome itself (eq or neq)
 ```
 
 Only a `problem` reading is confirmed; a `no_data` one is trusted as it is.
@@ -146,7 +166,8 @@ signal.confirmation        # SignalConfirmation(status, reason, effective, origi
 row = ws.resources.observations("db-1", signal="port")[0]
 row.state                  # the original reading, always
 row.confirmation           # ObservationConfirmation: status, reason, effective, refuted_if,
-                           # deadline, decided_at, and confirmers (probe or exec, state, value, reason, at)
+                           # deadline, decided_at, confirmers (probe or exec, state, value, reason, at),
+                           # and shared: True where it joined another reading's confirmation
 
 incident = ws.incidents.get(incident_id)
 for one in incident.history[0].inputs:   # the evidence a transition recorded, typed

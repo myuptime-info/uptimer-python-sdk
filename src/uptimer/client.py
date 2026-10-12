@@ -21,6 +21,7 @@ from uptimer.models import (
     Page,
     Resource,
     Template,
+    Worker,
     Workspace,
 )
 
@@ -85,6 +86,36 @@ class UptimerClient:
         """Return the Locations checks run from."""
         result, _ = self._http.request("GET", "v3/locations")
         return [Location.from_api(one) for one in result]
+
+    def create_location(self, name: str) -> Location:
+        """
+        Add a Location, and return it; a name another Location carries returns that Location.
+
+        Server administrators only, with a full key: otherwise ForbiddenError.
+        A blank name raises ValidationError.
+        """
+        result, _ = self._http.request("POST", "v3/locations", json={"name": name})
+        return Location.from_api(result)
+
+    def workers(self) -> list[Worker]:
+        """Return the registered workers. Server administrators only, with a full key."""
+        result, _ = self._http.request("GET", "v3/workers")
+        return [Worker.from_api(one) for one in result]
+
+    def register_worker(self, *, name: str, uid: str, location: str, tags: Sequence[str] | None = None) -> Worker:
+        """
+        Register a worker, and return it with its `next_step`.
+
+        `uid` is the identity the worker prints; `location` a Location id.
+        Server administrators only, with a full key: otherwise ForbiddenError.
+        A uid already registered raises ConflictError; a refused field raises
+        ValidationError, whose `field` names it.
+        """
+        body: dict[str, Any] = {"name": name, "uid": uid, "location": location}
+        if tags is not None:
+            body["tags"] = list(tags)
+        result, _ = self._http.request("POST", "v3/workers", json=body)
+        return Worker.from_api(result)
 
     def workspace(self, workspace_id: str) -> WorkspaceClient:
         """Resources and Incidents of one Workspace."""
